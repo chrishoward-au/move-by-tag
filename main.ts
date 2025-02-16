@@ -1,19 +1,22 @@
-import { Plugin, Modal, App } from 'obsidian';
+import { Plugin, Modal, App, Command } from 'obsidian';
 
 export default class MoveByTagPlugin extends Plugin {
     async onload() {
         console.log('Move by Tag Plugin loaded');
         
+        // Register the command in Obsidian
         this.addCommand({
             id: 'show-file-info',
             name: 'Show File Info',
-            callback: async () => {
+            checkCallback: (checking: boolean) => {
                 const activeFile = this.app.workspace.getActiveFile();
                 if (activeFile) {
-                    const currentFilePath = activeFile.path;
-                    const fileContent = await this.app.vault.read(activeFile);
-                    this.showFileInfoDialog(currentFilePath, fileContent);
+                    if (!checking) {
+                        this.showFileInfo(activeFile);
+                    }
+                    return true;
                 }
+                return false;
             }
         });
     }
@@ -25,6 +28,11 @@ export default class MoveByTagPlugin extends Plugin {
     extractTags(content: string): string[] {
       const tagRegex = /#\w+/g;
       return content.match(tagRegex) || [];
+    }
+
+    async showFileInfo(file: any) {
+        const content = await this.app.vault.read(file);
+        this.showFileInfoDialog(file.path, content);
     }
 
     showFileInfoDialog(filePath: string, content: string) {
