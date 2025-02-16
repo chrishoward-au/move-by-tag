@@ -1,4 +1,4 @@
-import { Plugin, Modal, App, Command, Setting, Notice, TFile, PluginSettingTab } from 'obsidian';
+import { Plugin, Modal, App, Command, Setting, Notice, TFile, PluginSettingTab, TextComponent } from 'obsidian';
 
 interface MoveByTagSettings {
   tagMappings: Record<string, string>;
@@ -16,6 +16,12 @@ const DEFAULT_SETTINGS: MoveByTagSettings = {
 
 export default class MoveByTag extends Plugin {
   settings: MoveByTagSettings;
+
+  private log(message: string) {
+    if (this.settings.enableLogging) {
+      console.log(`[Move by Tag] ${message}`);
+    }
+  }
 
   async onload() {
     await this.loadSettings();
@@ -130,6 +136,7 @@ class MoveByTagModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.setText('Move files based on their tags');
+    this.log('Opening Move by Tag modal');
 
     // Add a button to trigger the file movement process
     new Setting(contentEl)
@@ -143,36 +150,56 @@ class MoveByTagModal extends Modal {
   async moveFilesByTag(): Promise<void> {
     const { vault } = this.app;
     try {
+      this.log('Starting file movement process...');
       const files = this.app.vault.getMarkdownFiles();
+      this.log(`Found ${files.length} markdown files total`);
+      
       const movements: Array<{ file: TFile; targetPath: string }> = [];
 
       // First, plan all movements
       for (const file of files) {
+        this.log(`Processing file: ${file.path}`);
+        
         // Skip files in excluded folders
         if (this.settings.excludedFolders.some(folder => file.path.startsWith(folder))) {
+          this.log(`Skipping excluded file: ${file.path}`);
           continue;
         }
 
         const tags = await this.extractTags(file);
+        this.log(`Found tags in ${file.path}: ${tags.join(', ') || 'none'}`);
+        
         if (tags.length > 0) {
           const targetFolder = this.getTargetFolderForTags(tags);
           if (targetFolder) {
+            this.log(`Found target folder for tags: ${targetFolder}`);
             const targetPath = `${targetFolder}/${file.name}`;
+            
             // Check if file already exists in target
             if (await this.app.vault.adapter.exists(targetPath)) {
+              this.log(`File already exists at target location: ${targetPath}`);
               new Notice(`Skipping ${file.name}: File already exists in target location`);
               continue;
             }
+            
+            this.log(`Planning to move ${file.path} to ${targetPath}`);
             movements.push({ file, targetPath });
+          } else {
+            this.log(`No matching folder found for tags: ${tags.join(', ')}`);
           }
+        } else {
+          this.log(`No tags found in file: ${file.path}`);
         }
       }
 
       // If no files to move, notify and return
       if (movements.length === 0) {
+        this.log('No files to move - no valid tag mappings found');
         new Notice('No files to move');
         return;
       }
+      
+      this.log(`Found ${movements.length} files to move`);
 
       // Show confirmation if enabled
       if (this.settings.confirmBeforeMove) {
@@ -205,22 +232,35 @@ class MoveByTagModal extends Modal {
   }
 
   async extractTags(file: TFile): Promise<string[]> {
-    const content = await this.app.vault.read(file);
-    const tagRegex = /#([\w-]+)/g;
-    const tags = [];
-    let match;
-    while ((match = tagRegex.exec(content)) !== null) {
-      tags.push(match[1]);
+    try {
+      this.log(`Reading content from file: ${file.path}`);
+      const content = await this.app.vault.read(file);
+      const tagRegex = /#([\w-]+)/g;
+      const tags = [];
+      let match;
+      while ((match = tagRegex.exec(content)) !== null) {
+        tags.push(match[1]);
+      }
+      this.log(`Extracted tags from ${file.path}: ${tags.join(', ') || 'none'}`);
+      return tags;
+    } catch (error) {
+      this.log(`Error extracting tags from ${file.path}: ${error.message}`);
+      return [];
     }
-    return tags;
   }
 
   getTargetFolderForTags(tags: string[]): string | null {
+    this.log(`Checking tag mappings for tags: ${tags.join(', ')}`);
+    this.log(`Available mappings: ${JSON.stringify(this.settings.tagMappings)}`);
+    
     for (const tag of tags) {
       if (this.settings.tagMappings[tag]) {
+        this.log(`Found mapping for tag ${tag}: ${this.settings.tagMappings[tag]}`);
         return this.settings.tagMappings[tag];
       }
     }
+    
+    this.log('No matching folder found for any tag');
     return null;
   }
 }
@@ -256,7 +296,9 @@ class MoveByTagSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    // General Settings
+    // General Settings Section
+    containerEl.createEl('h3', { text: 'General Settings' });
+
     new Setting(containerEl)
       .setName('Confirm Before Moving')
       .setDesc('Show confirmation dialog before moving files')
@@ -277,56 +319,165 @@ class MoveByTagSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    // Excluded Folders
+    // Excluded Folders Section
+    containerEl.createEl('h3', { text: 'Excluded Folders' });
+    containerEl.createEl('p', { 
+      text: 'Files in these folders will not be moved. One folder path per line.',
+      cls: 'setting-item-description'
+    });
+
     new Setting(containerEl)
-      .setName('Excluded Folders')
-      .setDesc('Folders to exclude from file movements (one per line)')
       .addTextArea(text => text
         .setValue(this.plugin.settings.excludedFolders.join('\n'))
+        .setPlaceholder('folder1/subfolder\nfolder2')
         .onChange(async (value) => {
-          this.plugin.settings.excludedFolders = value.split('\n').filter(f => f.trim());
+          this.plugin.settings.excludedFolders = value.split('\n')
+            .map(f => f.trim())
+            .filter(f => f.length > 0);
           await this.plugin.saveSettings();
         }));
 
-    containerEl.createEl('h3', {text: 'Tag Mappings'});
-
-    // Add a setting for each tag-to-folder mapping
-    Object.keys(this.plugin.settings.tagMappings).forEach((tag: string) => {
-      const folder = this.plugin.settings.tagMappings[tag];
-      new Setting(containerEl)
-        .setName(`Tag: #${tag}`)
-        .setDesc(`Move files with this tag to: ${folder}`)
-        .addText(text => text
-          .setValue(folder)
-          .onChange(async (value) => {
-            this.plugin.settings.tagMappings[tag] = value;
-            await this.plugin.saveSettings();
-          }))
-        .addButton(button => button
-          .setButtonText('Delete')
-          .onClick(async () => {
-            delete this.plugin.settings.tagMappings[tag];
-            await this.plugin.saveSettings();
-            this.display();
-          }));
+    // Tag Mappings Section
+    containerEl.createEl('h3', { text: 'Tag Mappings' });
+    containerEl.createEl('p', { 
+      text: 'Define where files should be moved based on their tags.',
+      cls: 'setting-item-description'
     });
 
-    // Add a button to create a new tag-to-folder mapping
+    // Add New Mapping Button at the top
     new Setting(containerEl)
-      .setName('Add New Mapping')
-      .setDesc('Create a new tag-to-folder mapping')
       .addButton(button => button
-        .setButtonText('Add')
-        .onClick(async () => {
-          const tag = prompt('Enter the tag (without #):');
-          if (tag?.trim()) {
-            const folder = prompt('Enter the target folder:');
-            if (folder?.trim()) {
-              this.plugin.settings.tagMappings[tag.trim()] = folder.trim();
+        .setButtonText('Add New Mapping')
+        .setCta() // Make it stand out as the primary action
+        .onClick(() => this.showNewMappingModal()));
+
+    // Existing Mappings
+    const mappingsContainer = containerEl.createDiv('tag-mappings-container');
+    
+    // Sort tags alphabetically
+    const sortedTags = Object.keys(this.plugin.settings.tagMappings).sort();
+    
+    if (sortedTags.length === 0) {
+      mappingsContainer.createEl('p', { 
+        text: 'No tag mappings defined yet. Click "Add New Mapping" to create one.',
+        cls: 'setting-item-description'
+      });
+    }
+
+    sortedTags.forEach((tag: string) => {
+      const folder = this.plugin.settings.tagMappings[tag];
+      const setting = new Setting(mappingsContainer)
+        .setName(`#${tag}`)
+        .setDesc(`Current destination: ${folder}`)
+        .addText(text => text
+          .setValue(folder)
+          .setPlaceholder('folder/subfolder')
+          .onChange(async (value) => {
+            this.plugin.settings.tagMappings[tag] = value.trim();
+            await this.plugin.saveSettings();
+            setting.setDesc(`Current destination: ${value.trim()}`);
+          }))
+        .addButton(button => button
+          .setIcon('trash') // Using Obsidian's built-in trash icon
+          .setTooltip('Delete mapping')
+          .onClick(async () => {
+            if (await this.showDeleteConfirmation(tag)) {
+              delete this.plugin.settings.tagMappings[tag];
               await this.plugin.saveSettings();
               this.display();
             }
+          }));
+    });
+  }
+
+  private async showNewMappingModal(): Promise<void> {
+    const modal = new Modal(this.app);
+    modal.titleEl.setText('Create New Tag Mapping');
+    
+    const contentEl = modal.contentEl;
+    let tagInput: TextComponent;
+    let folderInput: TextComponent;
+    
+    // Tag input
+    new Setting(contentEl)
+      .setName('Tag')
+      .setDesc('Enter tag without the # symbol')
+      .addText(text => {
+        tagInput = text;
+        text.setPlaceholder('tag');
+      });
+    
+    // Folder input
+    new Setting(contentEl)
+      .setName('Destination Folder')
+      .setDesc('Enter the folder path where tagged files should be moved')
+      .addText(text => {
+        folderInput = text;
+        text.setPlaceholder('folder/subfolder');
+      });
+    
+    // Buttons
+    new Setting(contentEl)
+      .addButton(button => button
+        .setButtonText('Cancel')
+        .onClick(() => modal.close()))
+      .addButton(button => button
+        .setButtonText('Add')
+        .setCta()
+        .onClick(async () => {
+          const tag = tagInput.getValue().trim();
+          const folder = folderInput.getValue().trim();
+          
+          if (!tag) {
+            new Notice('Tag cannot be empty');
+            return;
           }
+          if (!folder) {
+            new Notice('Folder cannot be empty');
+            return;
+          }
+          
+          if (this.plugin.settings.tagMappings[tag]) {
+            new Notice(`Tag #${tag} already exists`);
+            return;
+          }
+          
+          this.plugin.settings.tagMappings[tag] = folder;
+          await this.plugin.saveSettings();
+          this.display();
+          modal.close();
         }));
+    
+    modal.open();
+  }
+
+  private async showDeleteConfirmation(tag: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const modal = new Modal(this.app);
+      modal.titleEl.setText('Delete Tag Mapping');
+      
+      const contentEl = modal.contentEl;
+      contentEl.createEl('p', {
+        text: `Are you sure you want to delete the mapping for tag #${tag}?\n` +
+              `Files with this tag will no longer be moved automatically.`
+      });
+      
+      new Setting(contentEl)
+        .addButton(button => button
+          .setButtonText('Cancel')
+          .onClick(() => {
+            modal.close();
+            resolve(false);
+          }))
+        .addButton(button => button
+          .setButtonText('Delete')
+          .setWarning()
+          .onClick(() => {
+            modal.close();
+            resolve(true);
+          }));
+      
+      modal.open();
+    });
   }
 }
