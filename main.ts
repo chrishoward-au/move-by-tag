@@ -663,11 +663,18 @@ class MoveByTagSettingTab extends PluginSettingTab {
   private async searchFolders(query: string): Promise<string[]> {
     if (!query) return [];
     
-    return this.app.vault.getAllLoadedFiles()
-      .filter(file => file instanceof this.app.vault.adapter.constructor.prototype.constructor)
-      .map(folder => folder.path)
+    const allFiles = this.app.vault.getAllLoadedFiles();
+    console.log('All files:', allFiles);
+    
+    const folders = this.app.vault.getAllFolders();
+    console.log('All folders:', folders);
+    
+    const folderPaths = folders.map(folder => folder.path)
       .filter(path => path !== '/' && path.toLowerCase().includes(query.toLowerCase()))
-      .sort((a, b) => a.localeCompare(b));
+      .sort();
+    
+    console.log('Filtered folder paths:', folderPaths);
+    return folderPaths;
   }
 
   private displayFolderSuggestions(folders: string[]) {
