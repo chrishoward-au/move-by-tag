@@ -43,7 +43,15 @@ export default class MoveByTag extends Plugin {
       name: 'Move by Tag',
       callback: async () => {
         const modal = new MoveByTagModal(this.app, this);
-        modal.open();
+        modal.onClose = () => {
+      // Clean up suggestions when modal is closed
+      const suggestionsContainer = document.getElementById('folder-suggestions');
+      if (suggestionsContainer) {
+        suggestionsContainer.remove();
+      }
+    };
+    
+    modal.open();
       },
     });
 
@@ -180,7 +188,15 @@ class MoveByTagModal extends Modal {
           resolve(true);
         });
 
-      modal.open();
+      modal.onClose = () => {
+      // Clean up suggestions when modal is closed
+      const suggestionsContainer = document.getElementById('folder-suggestions');
+      if (suggestionsContainer) {
+        suggestionsContainer.remove();
+      }
+    };
+    
+    modal.open();
     });
   }
 
@@ -406,7 +422,15 @@ class MoveByTagModal extends Modal {
         resolve(null);
       });
 
-      modal.open();
+      modal.onClose = () => {
+      // Clean up suggestions when modal is closed
+      const suggestionsContainer = document.getElementById('folder-suggestions');
+      if (suggestionsContainer) {
+        suggestionsContainer.remove();
+      }
+    };
+    
+    modal.open();
     });
   }
 }
@@ -625,14 +649,29 @@ class MoveByTagSettingTab extends PluginSettingTab {
           modal.close();
         }));
 
+    modal.onClose = () => {
+      // Clean up suggestions when modal is closed
+      const suggestionsContainer = document.getElementById('folder-suggestions');
+      if (suggestionsContainer) {
+        suggestionsContainer.remove();
+      }
+    };
+    
     modal.open();
   }
 
   private async searchFolders(query: string): Promise<string[]> {
-    const allFiles = this.app.vault.getFiles();
-    return allFiles
-      .filter(file => file.path.includes(query))
-      .map(file => file.path);
+    if (!query) return [];
+    
+    const allFolders = new Set<string>();
+    this.app.vault.getAllLoadedFiles().forEach(file => {
+      const folderPath = file.parent?.path;
+      if (folderPath && folderPath !== '/' && folderPath.toLowerCase().includes(query.toLowerCase())) {
+        allFolders.add(folderPath);
+      }
+    });
+    
+    return Array.from(allFolders).sort();
   }
 
   private displayFolderSuggestions(folders: string[]) {
@@ -749,6 +788,14 @@ class MoveByTagSettingTab extends PluginSettingTab {
           modal.close();
         }));
 
+    modal.onClose = () => {
+      // Clean up suggestions when modal is closed
+      const suggestionsContainer = document.getElementById('folder-suggestions');
+      if (suggestionsContainer) {
+        suggestionsContainer.remove();
+      }
+    };
+    
     modal.open();
   }
 
@@ -777,7 +824,15 @@ class MoveByTagSettingTab extends PluginSettingTab {
             resolve(true);
           }));
 
-      modal.open();
+      modal.onClose = () => {
+      // Clean up suggestions when modal is closed
+      const suggestionsContainer = document.getElementById('folder-suggestions');
+      if (suggestionsContainer) {
+        suggestionsContainer.remove();
+      }
+    };
+    
+    modal.open();
     });
   }
 
@@ -809,7 +864,15 @@ class MoveByTagSettingTab extends PluginSettingTab {
             resolve(true);
           }));
 
-      modal.open();
+      modal.onClose = () => {
+      // Clean up suggestions when modal is closed
+      const suggestionsContainer = document.getElementById('folder-suggestions');
+      if (suggestionsContainer) {
+        suggestionsContainer.remove();
+      }
+    };
+    
+    modal.open();
     });
   }
 }
