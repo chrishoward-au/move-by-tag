@@ -468,12 +468,23 @@ class MoveByTagSettingTab extends PluginSettingTab {
       cls: 'setting-item-description'
     });
 
-    // Add New Mapping Button at the top
+    // Add New Mapping and Delete All Buttons at the top
     new Setting(containerEl)
       .addButton(button => button
         .setButtonText('Add New Mapping')
         .setCta() // Make it stand out as the primary action
-        .onClick(() => this.showNewMappingModal()));
+        .onClick(() => this.showNewMappingModal()))
+      .addButton(button => button
+        .setButtonText('Delete All Mappings')
+        .setWarning()
+        .onClick(async () => {
+          const confirmed = await this.showDeleteAllConfirmation();
+          if (confirmed) {
+            this.plugin.settings.tagMappings = [];
+            await this.plugin.saveSettings();
+            this.display();
+          }
+        }));
 
     // Existing Mappings
     const mappingsContainer = containerEl.createDiv('tag-mappings-container');
@@ -664,6 +675,35 @@ class MoveByTagSettingTab extends PluginSettingTab {
         }));
     
     modal.open();
+  }
+
+  private async showDeleteAllConfirmation(): Promise<boolean> {
+    return new Promise((resolve) => {
+      const modal = new Modal(this.app);
+      modal.titleEl.setText('Delete All Tag Mappings');
+      
+      const contentEl = modal.contentEl;
+      contentEl.createEl('p', {
+        text: 'Are you sure you want to delete all tag mappings? This action cannot be undone.'
+      });
+      
+      new Setting(contentEl)
+        .addButton(button => button
+          .setButtonText('Cancel')
+          .onClick(() => {
+            modal.close();
+            resolve(false);
+          }))
+        .addButton(button => button
+          .setButtonText('Delete All')
+          .setWarning()
+          .onClick(() => {
+            modal.close();
+            resolve(true);
+          }));
+      
+      modal.open();
+    });
   }
 
   private async showDeleteConfirmation(mapping: TagMapping): Promise<boolean> {
