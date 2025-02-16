@@ -1,0 +1,10 @@
+{ 
+  "id": "example-plugin", 
+  "name": "Example Plugin", 
+  "version": "0.0.1", 
+  "description": "A basic Obsidian plugin.", 
+  "author": "Your Name", 
+  "minAppVersion": "0.9.7", 
+  "main": "main.js", 
+  "css": "styles.css" 
+}
