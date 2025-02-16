@@ -711,12 +711,17 @@ class MoveByTagSettingTab extends PluginSettingTab {
     // Position the suggestions container under the input field
     const inputEl = this.folderInput.inputEl;
     const rect = inputEl.getBoundingClientRect();
+    const modalEl = document.querySelector('.modal');
+    const modalWidth = modalEl ? modalEl.getBoundingClientRect().width : 500;
     newContainer.style.position = 'absolute';
     newContainer.style.left = `${rect.left}px`;
     newContainer.style.top = `${rect.bottom}px`;
-    newContainer.style.width = `${rect.width}px`;
+    newContainer.style.width = `${Math.min(modalWidth - 40, 500)}px`; // Use modal width minus padding, max 500px
     newContainer.style.maxHeight = '200px';
     newContainer.style.overflowY = 'auto';
+    newContainer.style.overflowX = 'hidden';
+    newContainer.style.textOverflow = 'ellipsis';
+    newContainer.style.whiteSpace = 'nowrap';
     
     // Append the suggestions container
     document.body.appendChild(newContainer);
