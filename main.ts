@@ -98,7 +98,7 @@ export default class MoveByTag extends Plugin {
     // Check if tagMappings is an object (old format)
     if (loadedData.tagMappings && typeof loadedData.tagMappings === 'object' && !Array.isArray(loadedData.tagMappings)) {
       // Convert old format to new format
-      const oldMappings = loadedData.tagMappings;
+      const oldMappings: Record<string, string> = loadedData.tagMappings;
       const convertedMappings: TagMapping[] = [];
 
       // Group mappings by folder
