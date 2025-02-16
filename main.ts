@@ -17,7 +17,7 @@ const DEFAULT_SETTINGS: MoveByTagSettings = {
 export default class MoveByTag extends Plugin {
   settings: MoveByTagSettings;
 
-  private log(message: string) {
+  public log(message: string) {
     if (this.settings.enableLogging) {
       console.log(`[Move by Tag] ${message}`);
     }
