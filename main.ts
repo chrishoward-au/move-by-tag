@@ -172,9 +172,24 @@ class MoveByTagModal extends Modal {
         this.plugin.log(`Found tags in ${file.path}: ${tags.join(', ') || 'none'}`);
         
         if (tags.length > 0) {
-          const targetFolder = this.getTargetFolderForTags(tags);
-          if (targetFolder) {
-            this.plugin.log(`Found target folder for tags: ${targetFolder}`);
+          const matches = this.getTargetFolderForTags(tags);
+          
+          if (matches.length > 0) {
+            let targetFolder: string | null = matches[0].folder;
+            
+            // If there are multiple matches, show dialog for user to choose
+            if (matches.length > 1) {
+              this.plugin.log(`Found multiple matching folders for ${file.path}: ${matches.map(m => m.folder).join(', ')}`);
+              targetFolder = await this.showRuleConflictDialog(file, matches);
+              
+              if (!targetFolder) {
+                this.plugin.log(`User skipped file ${file.path} due to rule conflict`);
+                new Notice(`Skipped ${file.name} due to rule conflict`);
+                continue;
+              }
+            }
+            
+            this.plugin.log(`Selected target folder: ${targetFolder}`);
             const targetPath = `${targetFolder}/${file.name}`;
             
             // Check if file already exists in target
@@ -254,12 +269,13 @@ class MoveByTagModal extends Modal {
     }
   }
 
-  getTargetFolderForTags(tags: string[]): string | null {
+  getTargetFolderForTags(tags: string[]): Array<{ tag: string; folder: string }> {
     this.plugin.log(`Checking tag mappings for tags: ${tags.join(', ')}`);
     this.plugin.log(`Available mappings: ${JSON.stringify(this.settings.tagMappings)}`);
     
     // Convert tags to lowercase for case-insensitive matching
     const lowerTags = tags.map(tag => tag.toLowerCase());
+    const matches: Array<{ tag: string; folder: string }> = [];
     
     // Check each mapping against the tags
     for (const [mappedTag, folder] of Object.entries(this.settings.tagMappings)) {
@@ -271,12 +287,55 @@ class MoveByTagModal extends Modal {
           tag === lowerMappedTag + 's' || 
           tag.slice(0, -1) === lowerMappedTag)) {
         this.plugin.log(`Found mapping for tag ${mappedTag}: ${folder}`);
-        return folder;
+        matches.push({ tag: mappedTag, folder });
       }
     }
     
-    this.plugin.log('No matching folder found for any tag');
-    return null;
+    if (matches.length === 0) {
+      this.plugin.log('No matching folder found for any tag');
+    }
+    
+    return matches;
+  }
+
+  private async showRuleConflictDialog(file: TFile, matches: Array<{ tag: string; folder: string }>): Promise<string | null> {
+    return new Promise((resolve) => {
+      const modal = new Modal(this.app);
+      modal.titleEl.setText(`Multiple Rules Match "${file.name}"`);
+      
+      const container = modal.contentEl.createEl('div');
+      container.createEl('p', { 
+        text: `This file matches multiple tag rules. Please select which folder to move it to:` 
+      });
+      
+      const list = container.createEl('div');
+      matches.forEach(({ tag, folder }) => {
+        const row = list.createEl('div', { cls: 'move-by-tag-rule-option' });
+        
+        const button = row.createEl('button', {
+          text: `Move to ${folder} (tag: #${tag})`,
+          cls: 'mod-cta'
+        });
+        
+        button.addEventListener('click', () => {
+          modal.close();
+          resolve(folder);
+        });
+      });
+      
+      // Add cancel button
+      const cancelButton = container.createEl('button', {
+        text: 'Skip this file',
+        cls: 'move-by-tag-cancel'
+      });
+      
+      cancelButton.addEventListener('click', () => {
+        modal.close();
+        resolve(null);
+      });
+      
+      modal.open();
+    });
   }
 }
 
