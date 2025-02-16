@@ -255,10 +255,20 @@ class MoveByTagModal extends Modal {
     this.plugin.log(`Checking tag mappings for tags: ${tags.join(', ')}`);
     this.plugin.log(`Available mappings: ${JSON.stringify(this.settings.tagMappings)}`);
     
-    for (const tag of tags) {
-      if (this.settings.tagMappings[tag]) {
-        this.plugin.log(`Found mapping for tag ${tag}: ${this.settings.tagMappings[tag]}`);
-        return this.settings.tagMappings[tag];
+    // Convert tags to lowercase for case-insensitive matching
+    const lowerTags = tags.map(tag => tag.toLowerCase());
+    
+    // Check each mapping against the tags
+    for (const [mappedTag, folder] of Object.entries(this.settings.tagMappings)) {
+      const lowerMappedTag = mappedTag.toLowerCase();
+      
+      // Check for exact match or plural form (adding 's')
+      if (lowerTags.some(tag => 
+          tag === lowerMappedTag || 
+          tag === lowerMappedTag + 's' || 
+          tag.slice(0, -1) === lowerMappedTag)) {
+        this.plugin.log(`Found mapping for tag ${mappedTag}: ${folder}`);
+        return folder;
       }
     }
     
