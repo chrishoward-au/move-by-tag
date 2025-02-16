@@ -102,7 +102,7 @@ export default class MoveByTag extends Plugin {
       const convertedMappings: TagMapping[] = [];
 
       // Group mappings by folder
-      const folderToTags = {};
+      const folderToTags: Record<string, string[]> = {};
       Object.entries(oldMappings).forEach(([tag, folder]) => {
         if (!folderToTags[folder]) {
           folderToTags[folder] = [];
