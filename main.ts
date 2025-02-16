@@ -3,12 +3,19 @@ import { Plugin, Modal, App } from 'obsidian';
 export default class MoveByTagPlugin extends Plugin {
     async onload() {
         console.log('Move by Tag Plugin loaded');
-        const activeFile = this.app.workspace.getActiveFile();
-        if (activeFile) {
-            const currentFilePath = activeFile.path;
-            const fileContent = await this.app.vault.read(activeFile);
-            this.showFileInfoDialog(currentFilePath, fileContent);
-        }
+        
+        this.addCommand({
+            id: 'show-file-info',
+            name: 'Show File Info',
+            callback: async () => {
+                const activeFile = this.app.workspace.getActiveFile();
+                if (activeFile) {
+                    const currentFilePath = activeFile.path;
+                    const fileContent = await this.app.vault.read(activeFile);
+                    this.showFileInfoDialog(currentFilePath, fileContent);
+                }
+            }
+        });
     }
 
     onunload() {
