@@ -664,14 +664,28 @@ class MoveByTagSettingTab extends PluginSettingTab {
     if (!query) return [];
     
     const allFolders = new Set<string>();
+    const addFolder = (folder: string) => {
+      if (folder && folder !== '/') {
+        allFolders.add(folder);
+        // Add all parent folders
+        const parts = folder.split('/');
+        for (let i = 1; i < parts.length; i++) {
+          const parentPath = parts.slice(0, i).join('/');
+          if (parentPath) allFolders.add(parentPath);
+        }
+      }
+    };
+
     this.app.vault.getAllLoadedFiles().forEach(file => {
       const folderPath = file.parent?.path;
-      if (folderPath && folderPath !== '/' && folderPath.toLowerCase().includes(query.toLowerCase())) {
-        allFolders.add(folderPath);
+      if (folderPath && folderPath.toLowerCase().includes(query.toLowerCase())) {
+        addFolder(folderPath);
       }
     });
     
-    return Array.from(allFolders).sort();
+    return Array.from(allFolders)
+      .filter(folder => folder.toLowerCase().includes(query.toLowerCase()))
+      .sort((a, b) => a.localeCompare(b));
   }
 
   private displayFolderSuggestions(folders: string[]) {
