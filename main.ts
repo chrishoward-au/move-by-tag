@@ -688,16 +688,29 @@ class MoveByTagSettingTab extends PluginSettingTab {
   private async searchFolders(query: string): Promise<string[]> {
     if (!query) return [];
     
-    const allFiles = this.app.vault.getAllLoadedFiles();
-    console.log('All files:', allFiles);
-    
     const folders = this.app.vault.getAllFolders();
     console.log('All folders:', folders);
     
-    const folderPaths = folders.map(folder => {
+    let folderPaths = folders.map(folder => {
       // Ensure leading slash for root-level folders
       return folder.path === '/' ? '/' : (folder.path.startsWith('/') ? folder.path : '/' + folder.path);
-    })
+    });
+
+    // If limited folders are set, only show folders within those paths
+    if (this.plugin.settings.limitedFolders.length > 0) {
+      const normalizedLimitedFolders = this.plugin.settings.limitedFolders.map(folder => 
+        folder.startsWith('/') ? folder : '/' + folder
+      );
+      
+      folderPaths = folderPaths.filter(path => 
+        normalizedLimitedFolders.some(limitedFolder => 
+          path.startsWith(limitedFolder) || limitedFolder.startsWith(path)
+        )
+      );
+    }
+    
+    // Apply search query filter
+    folderPaths = folderPaths
       .filter(path => path.toLowerCase().includes(query.toLowerCase()))
       .sort();
     
