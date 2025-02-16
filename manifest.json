@@ -1,9 +1,9 @@
 { 
-  "id": "example-plugin", 
-  "name": "Example Plugin", 
+  "id": "move-by-tag", 
+  "name": "Move by Tag", 
   "version": "0.0.1", 
-  "description": "A basic Obsidian plugin.", 
-  "author": "Your Name", 
+  "description": "Move a file to a new location based on tags", 
+  "author": "Chris Howard with Windsurf", 
   "minAppVersion": "0.9.7", 
   "main": "main.js", 
   "css": "styles.css" 

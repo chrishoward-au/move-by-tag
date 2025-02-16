@@ -1,8 +1,8 @@
 import { Plugin, Modal, App } from 'obsidian';
 
-export default class ExamplePlugin extends Plugin {
+export default class MoveByTagPlugin extends Plugin {
     async onload() {
-        console.log('Example Plugin loaded');
+        console.log('Move by Tag Plugin loaded');
         const activeFile = this.app.workspace.getActiveFile();
         if (activeFile) {
             const currentFilePath = activeFile.path;
@@ -12,7 +12,7 @@ export default class ExamplePlugin extends Plugin {
     }
 
     onunload() {
-        console.log('Example Plugin unloaded');
+        console.log('Move by Tag Plugin unloaded');
     }
 
     extractTags(content: string): string[] {
