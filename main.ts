@@ -84,9 +84,9 @@ export default class MoveByTag extends Plugin {
   showFileInfoDialog(filePath: string, content: string) {
     const fileName = filePath.split('/').pop();
     const tags = this.extractTags(content);
-    
+
     const dialogContent = `File Name: ${fileName}\nLocation: ${filePath}\nTags: ${tags.join(', ')}`;
-    
+
     const dialog = new InfoDialog(this.app, dialogContent);
     dialog.open();
   }
@@ -94,23 +94,40 @@ export default class MoveByTag extends Plugin {
   async loadSettings() {
     const loadedData = await this.loadData();
     console.log('Loaded settings data:', loadedData);
-    
+
     // Check if tagMappings is an object (old format)
     if (loadedData.tagMappings && typeof loadedData.tagMappings === 'object' && !Array.isArray(loadedData.tagMappings)) {
-        // Convert old format to new format
-        const oldMappings = loadedData.tagMappings;
-        this.settings.tagMappings = Object.keys(oldMappings).map(key => ({
-            tags: [key], // Assuming single tag per old mapping
-            folder: oldMappings[key],
-            id: this.generateId() // Generate a new ID for the new mapping
-        }));
+      // Convert old format to new format
+      const oldMappings = loadedData.tagMappings;
+      const convertedMappings: TagMapping[] = [];
+
+      // Group mappings by folder
+      const folderToTags = {};
+      Object.entries(oldMappings).forEach(([tag, folder]) => {
+        if (!folderToTags[folder]) {
+          folderToTags[folder] = [];
+        }
+        folderToTags[folder].push(tag);
+      });
+
+      // Create new mappings
+      Object.entries(folderToTags).forEach(([folder, tags]) => {
+        convertedMappings.push({
+          tags: tags,
+          folder: folder,
+          id: this.generateId()
+        });
+      });
+
+      this.settings.tagMappings = convertedMappings;
     } else {
-        // If not in old format, assign directly
-        this.settings.tagMappings = loadedData.tagMappings || [];
+      // If not in old format, assign directly
+      this.settings.tagMappings = loadedData.tagMappings || [];
     }
-    
+
     // Merge with default settings
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, this.settings);  }
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, this.settings);
+  }
 
   async saveSettings() {
     console.log('Saving settings data:', this.settings);
@@ -132,33 +149,33 @@ class MoveByTagModal extends Modal {
     return new Promise((resolve) => {
       const modal = new Modal(this.app);
       modal.contentEl.createEl('h2', { text: 'Confirm File Movements' });
-      
+
       const container = modal.contentEl.createEl('div', { cls: 'move-by-tag-confirmation' });
       container.createEl('p', { text: `About to move ${movements.length} files:` });
-      
+
       const list = container.createEl('ul');
       movements.slice(0, 10).forEach(({ file, targetPath }) => {
         list.createEl('li', { text: `${file.path} → ${targetPath}` });
       });
-      
+
       if (movements.length > 10) {
         container.createEl('p', { text: `...and ${movements.length - 10} more files` });
       }
-      
+
       const buttonContainer = container.createEl('div', { cls: 'move-by-tag-buttons' });
-      
+
       buttonContainer.createEl('button', { text: 'Cancel' })
         .addEventListener('click', () => {
           modal.close();
           resolve(false);
         });
-      
+
       buttonContainer.createEl('button', { text: 'Confirm' })
         .addEventListener('click', () => {
           modal.close();
           resolve(true);
         });
-      
+
       modal.open();
     });
   }
@@ -183,13 +200,13 @@ class MoveByTagModal extends Modal {
       this.plugin.log('Starting file movement process...');
       const files = this.app.vault.getMarkdownFiles();
       this.plugin.log(`Found ${files.length} markdown files total`);
-      
+
       const movements: Array<{ file: TFile; targetPath: string }> = [];
 
       // First, plan all movements
       for (const file of files) {
         this.plugin.log(`Processing file: ${file.path}`);
-        
+
         // Skip files in excluded folders
         if (this.settings.excludedFolders.some(folder => file.path.startsWith(folder))) {
           this.plugin.log(`Skipping excluded file: ${file.path}`);
@@ -198,35 +215,35 @@ class MoveByTagModal extends Modal {
 
         const tags = await this.extractTags(file);
         this.plugin.log(`Found tags in ${file.path}: ${tags.join(', ') || 'none'}`);
-        
+
         if (tags.length > 0) {
           const matches = this.getTargetFolderForTags(tags);
-          
+
           if (matches.length > 0) {
             let targetFolder: string | null = matches[0].mapping.folder;
-            
+
             // If there are multiple matches, show dialog for user to choose
             if (matches.length > 1) {
               this.plugin.log(`Found multiple matching folders for ${file.path}: ${matches.map(m => m.mapping.folder).join(', ')}`);
               targetFolder = await this.showRuleConflictDialog(file, matches);
-              
+
               if (!targetFolder) {
                 this.plugin.log(`User skipped file ${file.path} due to rule conflict`);
                 new Notice(`Skipped ${file.name} due to rule conflict`);
                 continue;
               }
             }
-            
+
             this.plugin.log(`Selected target folder: ${targetFolder}`);
             const targetPath = `${targetFolder}/${file.name}`;
-            
+
             // Check if file already exists in target
             if (await this.app.vault.adapter.exists(targetPath)) {
               this.plugin.log(`File already exists at target location: ${targetPath}`);
               new Notice(`Skipping ${file.name}: File already exists in target location`);
               continue;
             }
-            
+
             this.plugin.log(`Planning to move ${file.path} to ${targetPath}`);
             movements.push({ file, targetPath });
           } else {
@@ -244,7 +261,7 @@ class MoveByTagModal extends Modal {
         this.close();
         return;
       }
-      
+
       this.plugin.log(`Found ${movements.length} files to move`);
 
       // Show confirmation if enabled
@@ -302,49 +319,49 @@ class MoveByTagModal extends Modal {
       new Notice('No mappings defined.');
       return [];
     }
-    
+
     this.plugin.log(`Checking tag mappings for tags: ${fileTags.join(', ')}`);
     this.plugin.log(`Available mappings: ${JSON.stringify(this.settings.tagMappings)}`);
-    
+
     // Convert file tags to lowercase for case-insensitive matching
     const lowerFileTags = fileTags.map(tag => tag.toLowerCase());
     const matches: Array<{ mapping: TagMapping; matchedTags: string[] }> = [];
-    
+
     // Check each mapping
     for (const mapping of this.settings.tagMappings) {
       // Convert mapping tags to lowercase
       const lowerMappingTags = mapping.tags.map(tag => tag.toLowerCase());
-      
+
       // Track which tags from the mapping were found in the file
       const matchedTags: string[] = [];
-      
+
       // Check each tag in the mapping
       for (const mappingTag of mapping.tags) {
         const lowerMappingTag = mappingTag.toLowerCase();
-        
+
         // Check if any file tag matches this mapping tag
-        const matchingFileTag = lowerFileTags.find(fileTag => 
-          fileTag === lowerMappingTag || 
-          fileTag === lowerMappingTag + 's' || 
+        const matchingFileTag = lowerFileTags.find(fileTag =>
+          fileTag === lowerMappingTag ||
+          fileTag === lowerMappingTag + 's' ||
           fileTag.slice(0, -1) === lowerMappingTag
         );
-        
+
         if (matchingFileTag) {
           matchedTags.push(mappingTag);
         }
       }
-      
+
       // If all tags in the mapping were found, it's a match
       if (matchedTags.length === mapping.tags.length) {
         this.plugin.log(`Found matching mapping: ${mapping.tags.join(' + ')} → ${mapping.folder}`);
         matches.push({ mapping, matchedTags });
       }
     }
-    
+
     if (matches.length === 0) {
       this.plugin.log('No matching folder found for tags');
     }
-    
+
     return matches;
   }
 
@@ -352,38 +369,38 @@ class MoveByTagModal extends Modal {
     return new Promise((resolve) => {
       const modal = new Modal(this.app);
       modal.titleEl.setText(`Multiple Rules Match "${file.name}"`);
-      
+
       const container = modal.contentEl.createEl('div');
-      container.createEl('p', { 
-        text: `This file matches multiple tag rules. Please select which folder to move it to:` 
+      container.createEl('p', {
+        text: `This file matches multiple tag rules. Please select which folder to move it to:`
       });
-      
+
       const list = container.createEl('div');
       matches.forEach(({ mapping, matchedTags }) => {
         const row = list.createEl('div', { cls: 'move-by-tag-rule-option' });
-        
+
         const button = row.createEl('button', {
           text: `Move to ${mapping.folder} (tags: ${mapping.tags.map(t => '#' + t).join(' + ')})`,
           cls: 'mod-cta'
         });
-        
+
         button.addEventListener('click', () => {
           modal.close();
           resolve(mapping.folder);
         });
       });
-      
+
       // Add cancel button
       const cancelButton = container.createEl('button', {
         text: 'Skip this file',
         cls: 'move-by-tag-cancel'
       });
-      
+
       cancelButton.addEventListener('click', () => {
         modal.close();
         resolve(null);
       });
-      
+
       modal.open();
     });
   }
@@ -445,7 +462,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
 
     // Excluded Folders Section
     containerEl.createEl('h3', { text: 'Excluded Folders' });
-    containerEl.createEl('p', { 
+    containerEl.createEl('p', {
       text: 'Files in these folders will not be moved. One folder path per line.',
       cls: 'setting-item-description'
     });
@@ -463,7 +480,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
 
     // Tag Mappings Section
     containerEl.createEl('h3', { text: 'Tag Mappings' });
-    containerEl.createEl('p', { 
+    containerEl.createEl('p', {
       text: 'Define where files should be moved based on their tags.',
       cls: 'setting-item-description'
     });
@@ -488,9 +505,9 @@ class MoveByTagSettingTab extends PluginSettingTab {
 
     // Existing Mappings
     const mappingsContainer = containerEl.createDiv('tag-mappings-container');
-    
+
     if (this.plugin.settings.tagMappings.length === 0) {
-      mappingsContainer.createEl('p', { 
+      mappingsContainer.createEl('p', {
         text: 'No tag mappings defined yet. Click "Add New Mapping" to create one.',
         cls: 'setting-item-description'
       });
@@ -502,7 +519,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
 
     for (const mapping of sortedMappings) {
       const tagDisplay = mapping.tags.map(t => '#' + t).join(' + ');
-      
+
       new Setting(mappingsContainer)
         .setName(tagDisplay)
         .setDesc(`Current destination: ${mapping.folder}`)
@@ -532,11 +549,11 @@ class MoveByTagSettingTab extends PluginSettingTab {
   private async showNewMappingModal(): Promise<void> {
     const modal = new Modal(this.app);
     modal.titleEl.setText('Create New Tag Mapping');
-    
+
     const contentEl = modal.contentEl;
     let tagsInput: TextComponent;
     let folderInput: TextComponent;
-    
+
     // Tags input
     new Setting(contentEl)
       .setName('Tags')
@@ -545,7 +562,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
         tagsInput = text;
         text.setPlaceholder('tag1, tag2, tag3');
       });
-    
+
     // Folder input
     new Setting(contentEl)
       .setName('Destination Folder')
@@ -554,7 +571,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
         folderInput = text;
         text.setPlaceholder('folder/subfolder');
       });
-    
+
     // Buttons
     new Setting(contentEl)
       .addButton(button => button
@@ -566,51 +583,51 @@ class MoveByTagSettingTab extends PluginSettingTab {
         .onClick(async () => {
           const tagsValue = tagsInput.getValue().trim();
           const folder = folderInput.getValue().trim();
-          
+
           if (!tagsValue || !folder) {
             new Notice('Both tags and folder are required');
             return;
           }
-          
+
           const tags = tagsValue.split(',').map(t => t.trim()).filter(t => t.length > 0);
           if (tags.length === 0) {
             new Notice('At least one tag is required');
             return;
           }
-          
+
           // Check for duplicate tag combinations
           const tagSet = new Set(tags.map(t => t.toLowerCase()));
-          if (this.plugin.settings.tagMappings.some(m => 
-              m.tags.length === tags.length && 
-              m.tags.every(t => tagSet.has(t.toLowerCase()))
+          if (this.plugin.settings.tagMappings.some(m =>
+            m.tags.length === tags.length &&
+            m.tags.every(t => tagSet.has(t.toLowerCase()))
           )) {
             new Notice('This tag combination already has a mapping');
             return;
           }
-          
+
           const newMapping: TagMapping = {
             id: this.generateId(),
             tags,
             folder
           };
-          
+
           this.plugin.settings.tagMappings.push(newMapping);
           await this.plugin.saveSettings();
           this.display();
           modal.close();
         }));
-    
+
     modal.open();
   }
 
   private async showEditMappingModal(mapping: TagMapping): Promise<void> {
     const modal = new Modal(this.app);
     modal.titleEl.setText('Edit Tag Mapping');
-    
+
     const contentEl = modal.contentEl;
     let tagsInput: TextComponent;
     let folderInput: TextComponent;
-    
+
     // Tags input
     new Setting(contentEl)
       .setName('Tags')
@@ -620,7 +637,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
         text.setPlaceholder('tag1, tag2, tag3')
           .setValue(mapping.tags.join(', '));
       });
-    
+
     // Folder input
     new Setting(contentEl)
       .setName('Destination Folder')
@@ -630,7 +647,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
         text.setPlaceholder('folder/subfolder')
           .setValue(mapping.folder);
       });
-    
+
     // Buttons
     new Setting(contentEl)
       .addButton(button => button
@@ -642,38 +659,38 @@ class MoveByTagSettingTab extends PluginSettingTab {
         .onClick(async () => {
           const tagsValue = tagsInput.getValue().trim();
           const folder = folderInput.getValue().trim();
-          
+
           if (!tagsValue || !folder) {
             new Notice('Both tags and folder are required');
             return;
           }
-          
+
           const tags = tagsValue.split(',').map(t => t.trim()).filter(t => t.length > 0);
           if (tags.length === 0) {
             new Notice('At least one tag is required');
             return;
           }
-          
+
           // Check for duplicate tag combinations, excluding the current mapping
           const tagSet = new Set(tags.map(t => t.toLowerCase()));
-          if (this.plugin.settings.tagMappings.some(m => 
-              m.id !== mapping.id && // Exclude current mapping
-              m.tags.length === tags.length && 
-              m.tags.every(t => tagSet.has(t.toLowerCase()))
+          if (this.plugin.settings.tagMappings.some(m =>
+            m.id !== mapping.id && // Exclude current mapping
+            m.tags.length === tags.length &&
+            m.tags.every(t => tagSet.has(t.toLowerCase()))
           )) {
             new Notice('This tag combination already has a mapping');
             return;
           }
-          
+
           // Update the existing mapping
           mapping.tags = tags;
           mapping.folder = folder;
-          
+
           await this.plugin.saveSettings();
           this.display();
           modal.close();
         }));
-    
+
     modal.open();
   }
 
@@ -681,12 +698,12 @@ class MoveByTagSettingTab extends PluginSettingTab {
     return new Promise((resolve) => {
       const modal = new Modal(this.app);
       modal.titleEl.setText('Delete All Tag Mappings');
-      
+
       const contentEl = modal.contentEl;
       contentEl.createEl('p', {
         text: 'Are you sure you want to delete all tag mappings? This action cannot be undone.'
       });
-      
+
       new Setting(contentEl)
         .addButton(button => button
           .setButtonText('Cancel')
@@ -701,7 +718,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
             modal.close();
             resolve(true);
           }));
-      
+
       modal.open();
     });
   }
@@ -710,15 +727,15 @@ class MoveByTagSettingTab extends PluginSettingTab {
     return new Promise((resolve) => {
       const modal = new Modal(this.app);
       modal.titleEl.setText('Delete Tag Mapping');
-      
+
       const contentEl = modal.contentEl;
       const tagDisplay = mapping.tags.map(t => '#' + t).join(' + ');
-      
+
       contentEl.createEl('p', {
         text: `Are you sure you want to delete the mapping for ${tagDisplay}?\n` +
-              `Files with these tags will no longer be moved automatically.`
+          `Files with these tags will no longer be moved automatically.`
       });
-      
+
       new Setting(contentEl)
         .addButton(button => button
           .setButtonText('Cancel')
@@ -733,7 +750,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
             modal.close();
             resolve(true);
           }));
-      
+
       modal.open();
     });
   }
