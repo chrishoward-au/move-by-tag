@@ -1,14 +1,20 @@
 import { Plugin, Modal, App, Command, Setting, Notice, TFile, PluginSettingTab, TextComponent } from 'obsidian';
 
+interface TagMapping {
+  tags: string[];
+  folder: string;
+  id: string; // Unique identifier for the mapping
+}
+
 interface MoveByTagSettings {
-  tagMappings: Record<string, string>;
+  tagMappings: TagMapping[];
   confirmBeforeMove: boolean;
   excludedFolders: string[];
   enableLogging: boolean;
 }
 
 const DEFAULT_SETTINGS: MoveByTagSettings = {
-  tagMappings: {},
+  tagMappings: [],
   confirmBeforeMove: true,
   excludedFolders: [],
   enableLogging: true
@@ -269,36 +275,53 @@ class MoveByTagModal extends Modal {
     }
   }
 
-  getTargetFolderForTags(tags: string[]): Array<{ tag: string; folder: string }> {
-    this.plugin.log(`Checking tag mappings for tags: ${tags.join(', ')}`);
+  getTargetFolderForTags(fileTags: string[]): Array<{ mapping: TagMapping; matchedTags: string[] }> {
+    this.plugin.log(`Checking tag mappings for tags: ${fileTags.join(', ')}`);
     this.plugin.log(`Available mappings: ${JSON.stringify(this.settings.tagMappings)}`);
     
-    // Convert tags to lowercase for case-insensitive matching
-    const lowerTags = tags.map(tag => tag.toLowerCase());
-    const matches: Array<{ tag: string; folder: string }> = [];
+    // Convert file tags to lowercase for case-insensitive matching
+    const lowerFileTags = fileTags.map(tag => tag.toLowerCase());
+    const matches: Array<{ mapping: TagMapping; matchedTags: string[] }> = [];
     
-    // Check each mapping against the tags
-    for (const [mappedTag, folder] of Object.entries(this.settings.tagMappings)) {
-      const lowerMappedTag = mappedTag.toLowerCase();
+    // Check each mapping
+    for (const mapping of this.settings.tagMappings) {
+      // Convert mapping tags to lowercase
+      const lowerMappingTags = mapping.tags.map(tag => tag.toLowerCase());
       
-      // Check for exact match or plural form (adding 's')
-      if (lowerTags.some(tag => 
-          tag === lowerMappedTag || 
-          tag === lowerMappedTag + 's' || 
-          tag.slice(0, -1) === lowerMappedTag)) {
-        this.plugin.log(`Found mapping for tag ${mappedTag}: ${folder}`);
-        matches.push({ tag: mappedTag, folder });
+      // Track which tags from the mapping were found in the file
+      const matchedTags: string[] = [];
+      
+      // Check each tag in the mapping
+      for (const mappingTag of mapping.tags) {
+        const lowerMappingTag = mappingTag.toLowerCase();
+        
+        // Check if any file tag matches this mapping tag
+        const matchingFileTag = lowerFileTags.find(fileTag => 
+          fileTag === lowerMappingTag || 
+          fileTag === lowerMappingTag + 's' || 
+          fileTag.slice(0, -1) === lowerMappingTag
+        );
+        
+        if (matchingFileTag) {
+          matchedTags.push(mappingTag);
+        }
+      }
+      
+      // If all tags in the mapping were found, it's a match
+      if (matchedTags.length === mapping.tags.length) {
+        this.plugin.log(`Found matching mapping: ${mapping.tags.join(' + ')} → ${mapping.folder}`);
+        matches.push({ mapping, matchedTags });
       }
     }
     
     if (matches.length === 0) {
-      this.plugin.log('No matching folder found for any tag');
+      this.plugin.log('No matching folder found for tags');
     }
     
     return matches;
   }
 
-  private async showRuleConflictDialog(file: TFile, matches: Array<{ tag: string; folder: string }>): Promise<string | null> {
+  private async showRuleConflictDialog(file: TFile, matches: Array<{ mapping: TagMapping; matchedTags: string[] }>): Promise<string | null> {
     return new Promise((resolve) => {
       const modal = new Modal(this.app);
       modal.titleEl.setText(`Multiple Rules Match "${file.name}"`);
@@ -309,17 +332,17 @@ class MoveByTagModal extends Modal {
       });
       
       const list = container.createEl('div');
-      matches.forEach(({ tag, folder }) => {
+      matches.forEach(({ mapping, matchedTags }) => {
         const row = list.createEl('div', { cls: 'move-by-tag-rule-option' });
         
         const button = row.createEl('button', {
-          text: `Move to ${folder} (tag: #${tag})`,
+          text: `Move to ${mapping.folder} (tags: ${mapping.tags.map(t => '#' + t).join(' + ')})`,
           cls: 'mod-cta'
         });
         
         button.addEventListener('click', () => {
           modal.close();
-          resolve(folder);
+          resolve(mapping.folder);
         });
       });
       
