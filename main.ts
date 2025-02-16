@@ -29,6 +29,10 @@ export default class MoveByTag extends Plugin {
     }
   }
 
+  private generateId(): string {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  }
+
   async onload() {
     await this.loadSettings();
 
@@ -88,10 +92,28 @@ export default class MoveByTag extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-  }
+    const loadedData = await this.loadData();
+    console.log('Loaded settings data:', loadedData);
+    
+    // Check if tagMappings is an object (old format)
+    if (loadedData.tagMappings && typeof loadedData.tagMappings === 'object' && !Array.isArray(loadedData.tagMappings)) {
+        // Convert old format to new format
+        const oldMappings = loadedData.tagMappings;
+        this.settings.tagMappings = Object.keys(oldMappings).map(key => ({
+            tags: [key], // Assuming single tag per old mapping
+            folder: oldMappings[key],
+            id: this.generateId() // Generate a new ID for the new mapping
+        }));
+    } else {
+        // If not in old format, assign directly
+        this.settings.tagMappings = loadedData.tagMappings || [];
+    }
+    
+    // Merge with default settings
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, this.settings);  }
 
   async saveSettings() {
+    console.log('Saving settings data:', this.settings);
     await this.saveData(this.settings);
   }
 }
@@ -276,6 +298,11 @@ class MoveByTagModal extends Modal {
   }
 
   getTargetFolderForTags(fileTags: string[]): Array<{ mapping: TagMapping; matchedTags: string[] }> {
+    if (this.settings.tagMappings.length === 0) {
+      new Notice('No mappings defined.');
+      return [];
+    }
+    
     this.plugin.log(`Checking tag mappings for tags: ${fileTags.join(', ')}`);
     this.plugin.log(`Available mappings: ${JSON.stringify(this.settings.tagMappings)}`);
     
