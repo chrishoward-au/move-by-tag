@@ -451,40 +451,44 @@ class MoveByTagSettingTab extends PluginSettingTab {
     // Existing Mappings
     const mappingsContainer = containerEl.createDiv('tag-mappings-container');
     
-    // Sort tags alphabetically
-    const sortedTags = Object.keys(this.plugin.settings.tagMappings).sort();
-    
-    if (sortedTags.length === 0) {
+    if (this.plugin.settings.tagMappings.length === 0) {
       mappingsContainer.createEl('p', { 
         text: 'No tag mappings defined yet. Click "Add New Mapping" to create one.',
         cls: 'setting-item-description'
       });
     }
 
-    sortedTags.forEach((tag: string) => {
-      const folder = this.plugin.settings.tagMappings[tag];
-      const setting = new Setting(mappingsContainer)
-        .setName(`#${tag}`)
-        .setDesc(`Current destination: ${folder}`)
-        .addText(text => text
-          .setValue(folder)
-          .setPlaceholder('folder/subfolder')
-          .onChange(async (value) => {
-            this.plugin.settings.tagMappings[tag] = value.trim();
-            await this.plugin.saveSettings();
-            setting.setDesc(`Current destination: ${value.trim()}`);
+    // Sort mappings by first tag
+    const sortedMappings = [...this.plugin.settings.tagMappings]
+      .sort((a, b) => a.tags[0].localeCompare(b.tags[0]));
+
+    for (const mapping of sortedMappings) {
+      const tagDisplay = mapping.tags.map(t => '#' + t).join(' + ');
+      
+      new Setting(mappingsContainer)
+        .setName(tagDisplay)
+        .setDesc(`Current destination: ${mapping.folder}`)
+        .addButton(button => button
+          .setButtonText('Edit')
+          .onClick(() => {
+            this.showEditMappingModal(mapping);
           }))
         .addButton(button => button
-          .setIcon('trash') // Using Obsidian's built-in trash icon
+          .setIcon('trash')
           .setTooltip('Delete mapping')
           .onClick(async () => {
-            if (await this.showDeleteConfirmation(tag)) {
-              delete this.plugin.settings.tagMappings[tag];
+            if (await this.showDeleteConfirmation(mapping)) {
+              this.plugin.settings.tagMappings = this.plugin.settings.tagMappings
+                .filter(m => m.id !== mapping.id);
               await this.plugin.saveSettings();
               this.display();
             }
           }));
-    });
+    };
+  }
+
+  private generateId(): string {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
   }
 
   private async showNewMappingModal(): Promise<void> {
@@ -492,16 +496,16 @@ class MoveByTagSettingTab extends PluginSettingTab {
     modal.titleEl.setText('Create New Tag Mapping');
     
     const contentEl = modal.contentEl;
-    let tagInput: TextComponent;
+    let tagsInput: TextComponent;
     let folderInput: TextComponent;
     
-    // Tag input
+    // Tags input
     new Setting(contentEl)
-      .setName('Tag')
-      .setDesc('Enter tag without the # symbol')
+      .setName('Tags')
+      .setDesc('Enter tags without # symbol, separated by commas. All tags must be present for the rule to apply.')
       .addText(text => {
-        tagInput = text;
-        text.setPlaceholder('tag');
+        tagsInput = text;
+        text.setPlaceholder('tag1, tag2, tag3');
       });
     
     // Folder input
@@ -522,24 +526,37 @@ class MoveByTagSettingTab extends PluginSettingTab {
         .setButtonText('Add')
         .setCta()
         .onClick(async () => {
-          const tag = tagInput.getValue().trim();
+          const tagsValue = tagsInput.getValue().trim();
           const folder = folderInput.getValue().trim();
           
-          if (!tag) {
-            new Notice('Tag cannot be empty');
-            return;
-          }
-          if (!folder) {
-            new Notice('Folder cannot be empty');
+          if (!tagsValue || !folder) {
+            new Notice('Both tags and folder are required');
             return;
           }
           
-          if (this.plugin.settings.tagMappings[tag]) {
-            new Notice(`Tag #${tag} already exists`);
+          const tags = tagsValue.split(',').map(t => t.trim()).filter(t => t.length > 0);
+          if (tags.length === 0) {
+            new Notice('At least one tag is required');
             return;
           }
           
-          this.plugin.settings.tagMappings[tag] = folder;
+          // Check for duplicate tag combinations
+          const tagSet = new Set(tags.map(t => t.toLowerCase()));
+          if (this.plugin.settings.tagMappings.some(m => 
+              m.tags.length === tags.length && 
+              m.tags.every(t => tagSet.has(t.toLowerCase()))
+          )) {
+            new Notice('This tag combination already has a mapping');
+            return;
+          }
+          
+          const newMapping: TagMapping = {
+            id: this.generateId(),
+            tags,
+            folder
+          };
+          
+          this.plugin.settings.tagMappings.push(newMapping);
           await this.plugin.saveSettings();
           this.display();
           modal.close();
@@ -548,15 +565,91 @@ class MoveByTagSettingTab extends PluginSettingTab {
     modal.open();
   }
 
-  private async showDeleteConfirmation(tag: string): Promise<boolean> {
+  private async showEditMappingModal(mapping: TagMapping): Promise<void> {
+    const modal = new Modal(this.app);
+    modal.titleEl.setText('Edit Tag Mapping');
+    
+    const contentEl = modal.contentEl;
+    let tagsInput: TextComponent;
+    let folderInput: TextComponent;
+    
+    // Tags input
+    new Setting(contentEl)
+      .setName('Tags')
+      .setDesc('Enter tags without # symbol, separated by commas. All tags must be present for the rule to apply.')
+      .addText(text => {
+        tagsInput = text;
+        text.setPlaceholder('tag1, tag2, tag3')
+          .setValue(mapping.tags.join(', '));
+      });
+    
+    // Folder input
+    new Setting(contentEl)
+      .setName('Destination Folder')
+      .setDesc('Enter the folder path where tagged files should be moved')
+      .addText(text => {
+        folderInput = text;
+        text.setPlaceholder('folder/subfolder')
+          .setValue(mapping.folder);
+      });
+    
+    // Buttons
+    new Setting(contentEl)
+      .addButton(button => button
+        .setButtonText('Cancel')
+        .onClick(() => modal.close()))
+      .addButton(button => button
+        .setButtonText('Save')
+        .setCta()
+        .onClick(async () => {
+          const tagsValue = tagsInput.getValue().trim();
+          const folder = folderInput.getValue().trim();
+          
+          if (!tagsValue || !folder) {
+            new Notice('Both tags and folder are required');
+            return;
+          }
+          
+          const tags = tagsValue.split(',').map(t => t.trim()).filter(t => t.length > 0);
+          if (tags.length === 0) {
+            new Notice('At least one tag is required');
+            return;
+          }
+          
+          // Check for duplicate tag combinations, excluding the current mapping
+          const tagSet = new Set(tags.map(t => t.toLowerCase()));
+          if (this.plugin.settings.tagMappings.some(m => 
+              m.id !== mapping.id && // Exclude current mapping
+              m.tags.length === tags.length && 
+              m.tags.every(t => tagSet.has(t.toLowerCase()))
+          )) {
+            new Notice('This tag combination already has a mapping');
+            return;
+          }
+          
+          // Update the existing mapping
+          mapping.tags = tags;
+          mapping.folder = folder;
+          
+          await this.plugin.saveSettings();
+          this.display();
+          modal.close();
+        }));
+    
+    modal.open();
+  }
+
+  private async showDeleteConfirmation(mapping: TagMapping): Promise<boolean> {
     return new Promise((resolve) => {
       const modal = new Modal(this.app);
       modal.titleEl.setText('Delete Tag Mapping');
       
       const contentEl = modal.contentEl;
+      const tagDisplay = mapping.tags.map(t => '#' + t).join(' + ');
+      
       contentEl.createEl('p', {
-        text: `Are you sure you want to delete the mapping for tag #${tag}?\n` +
-              `Files with this tag will no longer be moved automatically.`
+        text: `Are you sure you want to delete the mapping for ${tagDisplay}?\n` +
+              `Files with these tags will no longer be moved automatically.`
       });
       
       new Setting(contentEl)
