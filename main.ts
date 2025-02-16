@@ -558,7 +558,6 @@ class MoveByTagSettingTab extends PluginSettingTab {
 
     const contentEl = modal.contentEl;
     let tagsInput: TextComponent;
-    this.folderInput = new TextComponent(contentEl); // Initialize folderInput here
 
     // Tags input
     new Setting(contentEl)
@@ -677,7 +676,6 @@ class MoveByTagSettingTab extends PluginSettingTab {
 
     const contentEl = modal.contentEl;
     let tagsInput: TextComponent;
-    this.folderInput = new TextComponent(contentEl); // Initialize folderInput here
 
     // Tags input
     new Setting(contentEl)
