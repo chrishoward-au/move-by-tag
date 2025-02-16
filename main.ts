@@ -593,12 +593,13 @@ class MoveByTagSettingTab extends PluginSettingTab {
       });
 
     // Folder input
-    new Setting(contentEl)
+    const folderSetting = new Setting(contentEl)
       .setName('Destination Folder')
       .addText((text) => {
         this.folderInput = text;
-        text.setPlaceholder('folder/subfolder')
-          .onChange(async (value) => {
+        text.setPlaceholder('folder/subfolder');
+        text.inputEl.style.width = '300px'; // Make input field wider
+        text.onChange(async (value) => {
             const results = await this.searchFolders(value);
             this.displayFolderSuggestions(results);
           });
