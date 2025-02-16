@@ -67,8 +67,11 @@ export default class MoveByTag extends Plugin {
     console.log('Move by Tag Plugin loaded');
   }
 
-  onunload() {
+  async onunload() {
     console.log('Move by Tag Plugin unloaded');
+    // Reset settings to default
+    this.settings = Object.assign({}, DEFAULT_SETTINGS);
+    await this.saveData({}); // Clear all stored data
   }
 
   extractTags(content: string): string[] {
