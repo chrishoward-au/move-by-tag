@@ -194,10 +194,11 @@ class MoveByTagModal extends Modal {
         }
       }
 
-      // If no files to move, notify and return
+      // If no files to move, notify and close
       if (movements.length === 0) {
         this.plugin.log('No files to move - no valid tag mappings found');
         new Notice('No files to move');
+        this.close();
         return;
       }
       
@@ -227,9 +228,11 @@ class MoveByTagModal extends Modal {
       }
 
       new Notice(`Successfully moved ${successCount} of ${movements.length} files`);
+      this.close();
     } catch (error) {
       new Notice(`Error during file movement: ${error.message}`);
       console.error('Move by Tag error:', error);
+      this.close();
     }
   }
 
