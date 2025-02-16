@@ -181,11 +181,11 @@ class MoveByTagModal extends Modal {
           const matches = this.getTargetFolderForTags(tags);
           
           if (matches.length > 0) {
-            let targetFolder: string | null = matches[0].folder;
+            let targetFolder: string | null = matches[0].mapping.folder;
             
             // If there are multiple matches, show dialog for user to choose
             if (matches.length > 1) {
-              this.plugin.log(`Found multiple matching folders for ${file.path}: ${matches.map(m => m.folder).join(', ')}`);
+              this.plugin.log(`Found multiple matching folders for ${file.path}: ${matches.map(m => m.mapping.folder).join(', ')}`);
               targetFolder = await this.showRuleConflictDialog(file, matches);
               
               if (!targetFolder) {
