@@ -520,18 +520,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
       .addButton(button => button
         .setButtonText('Add New Mapping')
         .setCta() // Make it stand out as the primary action
-        .onClick(() => this.showNewMappingModal()))
-      .addButton(button => button
-        .setButtonText('Delete All Mappings')
-        .setWarning()
-        .onClick(async () => {
-          const confirmed = await this.showDeleteAllConfirmation();
-          if (confirmed) {
-            this.plugin.settings.tagMappings = [];
-            await this.plugin.saveSettings();
-            this.display();
-          }
-        }));
+        .onClick(() => this.showNewMappingModal()));
 
     // Existing Mappings
     const mappingsContainer = containerEl.createDiv('tag-mappings-container');
@@ -717,7 +706,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
     newContainer.style.position = 'absolute';
     newContainer.style.left = `${rect.left}px`;
     newContainer.style.top = `${rect.bottom}px`;
-    newContainer.style.width = `${Math.min(modalWidth - 40, 500)}px`; // Use modal width minus padding, max 500px
+    newContainer.style.width = `${Math.min(modalWidth - 40, 300)}px`; // Use modal width minus padding, max 500px
     newContainer.style.maxHeight = '200px';
     newContainer.style.overflowY = 'auto';
     newContainer.style.overflowX = 'hidden';
