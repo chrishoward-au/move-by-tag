@@ -31,7 +31,7 @@ export default class MoveByTag extends Plugin {
       id: 'move-by-tag',
       name: 'Move by Tag',
       callback: async () => {
-        const modal = new MoveByTagModal(this.app, this.settings);
+        const modal = new MoveByTagModal(this.app, this);
         modal.open();
       },
     });
@@ -92,10 +92,12 @@ export default class MoveByTag extends Plugin {
 
 class MoveByTagModal extends Modal {
   private settings: MoveByTagSettings;
+  private plugin: MoveByTag;
 
-  constructor(app: App, settings: MoveByTagSettings) {
+  constructor(app: App, plugin: MoveByTag) {
     super(app);
-    this.settings = settings;
+    this.settings = plugin.settings;
+    this.plugin = plugin;
   }
 
   private async showConfirmationDialog(movements: Array<{ file: TFile; targetPath: string }>): Promise<boolean> {
@@ -136,7 +138,7 @@ class MoveByTagModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.setText('Move files based on their tags');
-    this.log('Opening Move by Tag modal');
+    this.plugin.log('Opening Move by Tag modal');
 
     // Add a button to trigger the file movement process
     new Setting(contentEl)
@@ -150,56 +152,56 @@ class MoveByTagModal extends Modal {
   async moveFilesByTag(): Promise<void> {
     const { vault } = this.app;
     try {
-      this.log('Starting file movement process...');
+      this.plugin.log('Starting file movement process...');
       const files = this.app.vault.getMarkdownFiles();
-      this.log(`Found ${files.length} markdown files total`);
+      this.plugin.log(`Found ${files.length} markdown files total`);
       
       const movements: Array<{ file: TFile; targetPath: string }> = [];
 
       // First, plan all movements
       for (const file of files) {
-        this.log(`Processing file: ${file.path}`);
+        this.plugin.log(`Processing file: ${file.path}`);
         
         // Skip files in excluded folders
         if (this.settings.excludedFolders.some(folder => file.path.startsWith(folder))) {
-          this.log(`Skipping excluded file: ${file.path}`);
+          this.plugin.log(`Skipping excluded file: ${file.path}`);
           continue;
         }
 
         const tags = await this.extractTags(file);
-        this.log(`Found tags in ${file.path}: ${tags.join(', ') || 'none'}`);
+        this.plugin.log(`Found tags in ${file.path}: ${tags.join(', ') || 'none'}`);
         
         if (tags.length > 0) {
           const targetFolder = this.getTargetFolderForTags(tags);
           if (targetFolder) {
-            this.log(`Found target folder for tags: ${targetFolder}`);
+            this.plugin.log(`Found target folder for tags: ${targetFolder}`);
             const targetPath = `${targetFolder}/${file.name}`;
             
             // Check if file already exists in target
             if (await this.app.vault.adapter.exists(targetPath)) {
-              this.log(`File already exists at target location: ${targetPath}`);
+              this.plugin.log(`File already exists at target location: ${targetPath}`);
               new Notice(`Skipping ${file.name}: File already exists in target location`);
               continue;
             }
             
-            this.log(`Planning to move ${file.path} to ${targetPath}`);
+            this.plugin.log(`Planning to move ${file.path} to ${targetPath}`);
             movements.push({ file, targetPath });
           } else {
-            this.log(`No matching folder found for tags: ${tags.join(', ')}`);
+            this.plugin.log(`No matching folder found for tags: ${tags.join(', ')}`);
           }
         } else {
-          this.log(`No tags found in file: ${file.path}`);
+          this.plugin.log(`No tags found in file: ${file.path}`);
         }
       }
 
       // If no files to move, notify and return
       if (movements.length === 0) {
-        this.log('No files to move - no valid tag mappings found');
+        this.plugin.log('No files to move - no valid tag mappings found');
         new Notice('No files to move');
         return;
       }
       
-      this.log(`Found ${movements.length} files to move`);
+      this.plugin.log(`Found ${movements.length} files to move`);
 
       // Show confirmation if enabled
       if (this.settings.confirmBeforeMove) {
@@ -233,7 +235,7 @@ class MoveByTagModal extends Modal {
 
   async extractTags(file: TFile): Promise<string[]> {
     try {
-      this.log(`Reading content from file: ${file.path}`);
+      this.plugin.log(`Reading content from file: ${file.path}`);
       const content = await this.app.vault.read(file);
       const tagRegex = /#([\w-]+)/g;
       const tags = [];
@@ -241,26 +243,26 @@ class MoveByTagModal extends Modal {
       while ((match = tagRegex.exec(content)) !== null) {
         tags.push(match[1]);
       }
-      this.log(`Extracted tags from ${file.path}: ${tags.join(', ') || 'none'}`);
+      this.plugin.log(`Extracted tags from ${file.path}: ${tags.join(', ') || 'none'}`);
       return tags;
     } catch (error) {
-      this.log(`Error extracting tags from ${file.path}: ${error.message}`);
+      this.plugin.log(`Error extracting tags from ${file.path}: ${error.message}`);
       return [];
     }
   }
 
   getTargetFolderForTags(tags: string[]): string | null {
-    this.log(`Checking tag mappings for tags: ${tags.join(', ')}`);
-    this.log(`Available mappings: ${JSON.stringify(this.settings.tagMappings)}`);
+    this.plugin.log(`Checking tag mappings for tags: ${tags.join(', ')}`);
+    this.plugin.log(`Available mappings: ${JSON.stringify(this.settings.tagMappings)}`);
     
     for (const tag of tags) {
       if (this.settings.tagMappings[tag]) {
-        this.log(`Found mapping for tag ${tag}: ${this.settings.tagMappings[tag]}`);
+        this.plugin.log(`Found mapping for tag ${tag}: ${this.settings.tagMappings[tag]}`);
         return this.settings.tagMappings[tag];
       }
     }
     
-    this.log('No matching folder found for any tag');
+    this.plugin.log('No matching folder found for any tag');
     return null;
   }
 }
