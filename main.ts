@@ -34,6 +34,7 @@ export default class MoveByTag extends Plugin {
   }
 
   async onload() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS);
     await this.loadSettings();
 
     // This adds a command to the app's command palette.
@@ -70,8 +71,8 @@ export default class MoveByTag extends Plugin {
   async onunload() {
     console.log('Move by Tag Plugin unloaded');
     // Reset settings to default
-    this.settings = Object.assign({}, DEFAULT_SETTINGS);
-    await this.saveData({}); // Clear all stored data
+    // this.settings = Object.assign({}, DEFAULT_SETTINGS);
+    // await this.saveData({}); // Clear all stored data
   }
 
   extractTags(content: string): string[] {
@@ -129,7 +130,7 @@ export default class MoveByTag extends Plugin {
     }
 
     // Merge with default settings
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, this.settings);
+    this.settings = { ...DEFAULT_SETTINGS, ...this.settings };
   }
 
   async saveSettings() {
@@ -371,7 +372,7 @@ class MoveByTagModal extends Modal {
   private async showRuleConflictDialog(file: TFile, matches: Array<{ mapping: TagMapping; matchedTags: string[] }>): Promise<string | null> {
     return new Promise((resolve) => {
       const modal = new Modal(this.app);
-      modal.titleEl.setText(`Multiple Rules Match "${file.name}"`);
+      modal.titleEl.setText(`"${file.name}"`);
 
       const container = modal.contentEl.createEl('div');
       container.createEl('p', {
@@ -386,6 +387,7 @@ class MoveByTagModal extends Modal {
           text: `Move to ${mapping.folder} (tags: ${mapping.tags.map(t => '#' + t).join(' + ')})`,
           cls: 'mod-cta'
         });
+        button.style.marginBottom = '10px'; // Add margin to the bottom of the button
 
         button.addEventListener('click', () => {
           modal.close();
@@ -530,18 +532,18 @@ class MoveByTagSettingTab extends PluginSettingTab {
           .setButtonText('Edit')
           .onClick(() => {
             this.showEditMappingModal(mapping);
-          }))
-        .addButton(button => button
-          .setIcon('trash')
-          .setTooltip('Delete mapping')
-          .onClick(async () => {
-            if (await this.showDeleteConfirmation(mapping)) {
-              this.plugin.settings.tagMappings = this.plugin.settings.tagMappings
-                .filter(m => m.id !== mapping.id);
-              await this.plugin.saveSettings();
-              this.display();
-            }
           }));
+      // .addButton(button => button
+      //   .setIcon('trash')
+      //   .setTooltip('Delete mapping')
+      //   .onClick(async () => {
+      //     if (await this.showDeleteConfirmation(mapping)) {
+      //       this.plugin.settings.tagMappings = this.plugin.settings.tagMappings
+      //         .filter(m => m.id !== mapping.id);
+      //       await this.plugin.saveSettings();
+      //       this.display();
+      //     }
+      //   }));
     };
   }
 
