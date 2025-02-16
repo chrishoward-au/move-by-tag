@@ -10,6 +10,7 @@ interface MoveByTagSettings {
   tagMappings: TagMapping[];
   confirmBeforeMove: boolean;
   excludedFolders: string[];
+  limitedFolders: string[];
   enableLogging: boolean;
 }
 
@@ -17,6 +18,7 @@ const DEFAULT_SETTINGS: MoveByTagSettings = {
   tagMappings: [],
   confirmBeforeMove: true,
   excludedFolders: [],
+  limitedFolders: [],
   enableLogging: true
 };
 
@@ -227,9 +229,24 @@ class MoveByTagModal extends Modal {
       for (const file of files) {
         this.plugin.log(`Processing file: ${file.path}`);
 
+        // Normalize file path
+        const normalizedFilePath = file.path.startsWith('/') ? file.path : '/' + file.path;
+
         // Skip files in excluded folders
-        if (this.settings.excludedFolders.some(folder => file.path.startsWith(folder))) {
+        if (this.settings.excludedFolders.some(folder => {
+          const normalizedFolder = folder.startsWith('/') ? folder : '/' + folder;
+          return normalizedFilePath.startsWith(normalizedFolder);
+        })) {
           this.plugin.log(`Skipping excluded file: ${file.path}`);
+          continue;
+        }
+
+        // Skip files not in limited folders
+        if (this.settings.limitedFolders.length > 0 && !this.settings.limitedFolders.some(folder => {
+          const normalizedFolder = folder.startsWith('/') ? folder : '/' + folder;
+          return normalizedFilePath.startsWith(normalizedFolder);
+        })) {
+          this.plugin.log(`Skipping file not in limited folders: ${file.path}`);
           continue;
         }
 
@@ -508,6 +525,24 @@ class MoveByTagSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
+    // Specific Folders Section
+    containerEl.createEl('h3', { text: 'Specific Folders' });
+    containerEl.createEl('p', {
+      text: 'Files will only be moved from these folders. One folder path per line.',
+      cls: 'setting-item-description'
+    });
+
+    new Setting(containerEl)
+      .addTextArea(text => text
+        .setValue(this.plugin.settings.limitedFolders.join('\n'))
+        .setPlaceholder('folder1/subfolder\nfolder2')
+        .onChange(async (value) => {
+          this.plugin.settings.limitedFolders = value.split('\n')
+            .map(f => f.trim())
+            .filter(f => f.length > 0);
+          await this.plugin.saveSettings();
+        }));
+
     // Tag Mappings Section
     containerEl.createEl('h3', { text: 'Tag Mappings' });
     containerEl.createEl('p', {
@@ -659,8 +694,11 @@ class MoveByTagSettingTab extends PluginSettingTab {
     const folders = this.app.vault.getAllFolders();
     console.log('All folders:', folders);
     
-    const folderPaths = folders.map(folder => folder.path)
-      .filter(path => path !== '/' && path.toLowerCase().includes(query.toLowerCase()))
+    const folderPaths = folders.map(folder => {
+      // Ensure leading slash for root-level folders
+      return folder.path === '/' ? '/' : (folder.path.startsWith('/') ? folder.path : '/' + folder.path);
+    })
+      .filter(path => path.toLowerCase().includes(query.toLowerCase()))
       .sort();
     
     console.log('Filtered folder paths:', folderPaths);
