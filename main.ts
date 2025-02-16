@@ -431,6 +431,7 @@ class InfoDialog extends Modal {
 }
 
 class MoveByTagSettingTab extends PluginSettingTab {
+  private folderInput: TextComponent; // Declare folderInput here
   plugin: MoveByTag;
 
   constructor(app: App, plugin: MoveByTag) {
@@ -557,7 +558,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
 
     const contentEl = modal.contentEl;
     let tagsInput: TextComponent;
-    let folderInput: TextComponent;
+    this.folderInput = new TextComponent(contentEl); // Initialize folderInput here
 
     // Tags input
     new Setting(contentEl)
@@ -571,10 +572,13 @@ class MoveByTagSettingTab extends PluginSettingTab {
     // Folder input
     new Setting(contentEl)
       .setName('Destination Folder')
-      .setDesc('Enter the folder path where tagged files should be moved')
-      .addText(text => {
-        folderInput = text;
-        text.setPlaceholder('folder/subfolder');
+      .addText((text) => {
+        this.folderInput = text;
+        text.setPlaceholder('folder/subfolder')
+          .onChange(async (value) => {
+            const results = await this.searchFolders(value);
+            this.displayFolderSuggestions(results);
+          });
       });
 
     // Buttons
@@ -587,7 +591,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
         .setCta()
         .onClick(async () => {
           const tagsValue = tagsInput.getValue().trim();
-          const folder = folderInput.getValue().trim();
+          const folder = this.folderInput.getValue().trim();
 
           if (!tagsValue || !folder) {
             new Notice('Both tags and folder are required');
@@ -625,13 +629,55 @@ class MoveByTagSettingTab extends PluginSettingTab {
     modal.open();
   }
 
+  private async searchFolders(query: string): Promise<string[]> {
+    const allFiles = this.app.vault.getFiles();
+    return allFiles
+      .filter(file => file.path.includes(query))
+      .map(file => file.path);
+  }
+
+  private displayFolderSuggestions(folders: string[]) {
+    // Clear previous suggestions
+    const suggestionsContainer = document.getElementById('folder-suggestions');
+    if (suggestionsContainer) {
+      suggestionsContainer.remove();
+    }
+
+    // Create a new suggestions container
+    const newContainer = document.createElement('div');
+    newContainer.id = 'folder-suggestions';
+    newContainer.style.position = 'absolute';
+    newContainer.style.backgroundColor = 'white';
+    newContainer.style.border = '1px solid #ccc';
+    newContainer.style.zIndex = '1000';
+
+    // Add suggestions to the container
+    folders.forEach(folder => {
+      const suggestionItem = document.createElement('div');
+      suggestionItem.textContent = folder;
+      suggestionItem.style.padding = '5px';
+      suggestionItem.style.cursor = 'pointer';
+
+      // Add click event to select folder
+      suggestionItem.addEventListener('click', () => {
+        this.folderInput.setValue(folder); // Set the input value to the selected folder
+        newContainer.remove(); // Remove suggestions after selection
+      });
+
+      newContainer.appendChild(suggestionItem);
+    });
+
+    // Append the suggestions container to the input element
+    document.body.appendChild(newContainer);
+  }
+
   private async showEditMappingModal(mapping: TagMapping): Promise<void> {
     const modal = new Modal(this.app);
     modal.titleEl.setText('Edit Tag Mapping');
 
     const contentEl = modal.contentEl;
     let tagsInput: TextComponent;
-    let folderInput: TextComponent;
+    this.folderInput = new TextComponent(contentEl); // Initialize folderInput here
 
     // Tags input
     new Setting(contentEl)
@@ -646,9 +692,8 @@ class MoveByTagSettingTab extends PluginSettingTab {
     // Folder input
     new Setting(contentEl)
       .setName('Destination Folder')
-      .setDesc('Enter the folder path where tagged files should be moved')
-      .addText(text => {
-        folderInput = text;
+      .addText((text) => {
+        this.folderInput = text;
         text.setPlaceholder('folder/subfolder')
           .setValue(mapping.folder);
       });
@@ -663,7 +708,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
         .setCta()
         .onClick(async () => {
           const tagsValue = tagsInput.getValue().trim();
-          const folder = folderInput.getValue().trim();
+          const folder = this.folderInput.getValue().trim();
 
           if (!tagsValue || !folder) {
             new Notice('Both tags and folder are required');
