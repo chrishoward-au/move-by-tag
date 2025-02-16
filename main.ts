@@ -220,7 +220,10 @@ class MoveByTagModal extends Modal {
     const { vault } = this.app;
     try {
       this.plugin.log('Starting file movement process...');
-      const files = this.app.vault.getMarkdownFiles();
+      const files = this.app.vault.getMarkdownFiles().filter(file => {
+        return this.settings.limitedFolders.length === 0 ||
+          this.settings.limitedFolders.some(folder => file.path.startsWith(folder));
+      });
       this.plugin.log(`Found ${files.length} markdown files total`);
 
       const movements: Array<{ file: TFile; targetPath: string }> = [];
@@ -238,15 +241,6 @@ class MoveByTagModal extends Modal {
           return normalizedFilePath.startsWith(normalizedFolder);
         })) {
           this.plugin.log(`Skipping excluded file: ${file.path}`);
-          continue;
-        }
-
-        // Skip files not in limited folders
-        if (this.settings.limitedFolders.length > 0 && !this.settings.limitedFolders.some(folder => {
-          const normalizedFolder = folder.startsWith('/') ? folder : '/' + folder;
-          return normalizedFilePath.startsWith(normalizedFolder);
-        })) {
-          this.plugin.log(`Skipping file not in limited folders: ${file.path}`);
           continue;
         }
 
