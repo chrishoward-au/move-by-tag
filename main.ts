@@ -666,7 +666,17 @@ class MoveByTagSettingTab extends PluginSettingTab {
       newContainer.appendChild(suggestionItem);
     });
 
-    // Append the suggestions container to the input element
+    // Position the suggestions container under the input field
+    const inputEl = this.folderInput.inputEl;
+    const rect = inputEl.getBoundingClientRect();
+    newContainer.style.position = 'absolute';
+    newContainer.style.left = `${rect.left}px`;
+    newContainer.style.top = `${rect.bottom}px`;
+    newContainer.style.width = `${rect.width}px`;
+    newContainer.style.maxHeight = '200px';
+    newContainer.style.overflowY = 'auto';
+    
+    // Append the suggestions container
     document.body.appendChild(newContainer);
   }
 
