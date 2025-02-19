@@ -821,13 +821,18 @@ class MoveByTagSettingTab extends PluginSettingTab {
           .setValue(mapping.tags.join(', '));
       });
 
-    // Folder input
-    new Setting(contentEl)
+    // Folder input with dropdown
+    const folderSetting = new Setting(contentEl)
       .setName('Destination Folder')
       .addText((text) => {
         this.folderInput = text;
-        text.setPlaceholder('folder/subfolder')
-          .setValue(mapping.folder);
+        text.setPlaceholder('folder/subfolder');
+        text.inputEl.style.width = '300px'; // Make input field wider
+        text.onChange(async (value) => {
+          const results = await this.searchFolders(value);
+          this.displayFolderSuggestions(results);
+        });
+        text.setValue(mapping.folder);
       });
 
     // Buttons

@@ -5,7 +5,7 @@
       "tags": [
         "articles"
       ],
-      "folder": "/Writing"
+      "folder": "/Writing/Articles"
     },
     {
       "id": "m7786ggp9x6eyzhi5iu",
@@ -20,7 +20,7 @@
       "tags": [
         "misc"
       ],
-      "folder": "Writing"
+      "folder": "/Writing"
     }
   ],
   "confirmBeforeMove": false,
