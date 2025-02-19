@@ -237,7 +237,11 @@ class MoveByTagModal extends Modal {
       this.plugin.log('Starting file movement process...');
       const files = this.app.vault.getMarkdownFiles().filter(file => {
         return this.settings.limitedFolders.length === 0 ||
-          this.settings.limitedFolders.some(folder => file.path.startsWith(folder));
+          this.settings.limitedFolders.some(folder => {
+            const normalizedFolder = folder === '/' ? '/' : folder.replace(/^\//, '');
+            const normalizedFilePath = file.path.startsWith('/') ? file.path.replace(/^\//, '') : file.path;
+            return normalizedFilePath.startsWith(normalizedFolder);
+          });
       });
       this.plugin.log(`Found ${files.length} markdown files total`);
 
@@ -711,18 +715,6 @@ class MoveByTagSettingTab extends PluginSettingTab {
       return folder.path === '/' ? '/' : (folder.path.startsWith('/') ? folder.path : '/' + folder.path);
     });
 
-    // If limited folders are set, only show folders within those paths
-    if (this.plugin.settings.limitedFolders.length > 0) {
-      const normalizedLimitedFolders = this.plugin.settings.limitedFolders.map(folder => 
-        folder.startsWith('/') ? folder : '/' + folder
-      );
-      
-      folderPaths = folderPaths.filter(path => 
-        normalizedLimitedFolders.some(limitedFolder => 
-          path.startsWith(limitedFolder) || limitedFolder.startsWith(path)
-        )
-      );
-    }
     
     // Apply search query filter
     folderPaths = folderPaths

@@ -25,6 +25,8 @@
   ],
   "confirmBeforeMove": false,
   "excludedFolders": [],
-  "limitedFolders": [],
+  "limitedFolders": [
+    "/Inbox"
+  ],
   "enableLogging": false
 }
