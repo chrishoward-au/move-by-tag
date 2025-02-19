@@ -110,8 +110,11 @@ export default class MoveByTag extends Plugin {
     const loadedData = await this.loadData();
     console.log('Loaded settings data:', loadedData);
 
+    // Initialize settings with defaults
+    this.settings = { ...DEFAULT_SETTINGS };
+
     // Check if tagMappings is an object (old format)
-    if (loadedData.tagMappings && typeof loadedData.tagMappings === 'object' && !Array.isArray(loadedData.tagMappings)) {
+    if (loadedData && loadedData.tagMappings && typeof loadedData.tagMappings === 'object' && !Array.isArray(loadedData.tagMappings)) {
       // Convert old format to new format
       const oldMappings: Record<string, string> = loadedData.tagMappings;
       const convertedMappings: TagMapping[] = [];
@@ -135,16 +138,24 @@ export default class MoveByTag extends Plugin {
       });
 
       this.settings.tagMappings = convertedMappings;
-    } else {
+    } else if (loadedData && loadedData.tagMappings) {
       // If not in old format, assign directly
-      this.settings.tagMappings = loadedData.tagMappings || [];
+      this.settings.tagMappings = loadedData.tagMappings;
     }
 
-    console.log('Loaded excluded folders:', loadedData.excludedFolders);
-    console.log('Loaded limited folders:', loadedData.limitedFolders);
+    // Merge loaded data with settings
+    if (loadedData) {
+      this.settings = {
+        ...this.settings,
+        confirmBeforeMove: loadedData.confirmBeforeMove ?? DEFAULT_SETTINGS.confirmBeforeMove,
+        excludedFolders: loadedData.excludedFolders ?? DEFAULT_SETTINGS.excludedFolders,
+        limitedFolders: loadedData.limitedFolders ?? DEFAULT_SETTINGS.limitedFolders,
+        enableLogging: loadedData.enableLogging ?? DEFAULT_SETTINGS.enableLogging
+      };
+    }
 
-    // Merge with default settings
-    this.settings = { ...DEFAULT_SETTINGS, ...this.settings };
+    console.log('Loaded excluded folders:', this.settings.excludedFolders);
+    console.log('Loaded limited folders:', this.settings.limitedFolders);
   }
 
   async saveSettings() {

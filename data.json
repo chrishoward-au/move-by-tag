@@ -5,7 +5,7 @@
       "tags": [
         "articles"
       ],
-      "folder": "Inbox"
+      "folder": "/Writing"
     },
     {
       "id": "m7786ggp9x6eyzhi5iu",
@@ -24,9 +24,7 @@
     }
   ],
   "confirmBeforeMove": false,
-  "excludedFolders": [
-    "xxxx"
-  ],
+  "excludedFolders": [],
   "limitedFolders": [
     "/Inbox"
   ],
