@@ -20,13 +20,11 @@
       "tags": [
         "misc"
       ],
-      "folder": "Development/Coding"
+      "folder": "Writing"
     }
   ],
   "confirmBeforeMove": false,
   "excludedFolders": [],
-  "limitedFolders": [
-    "/Inbox"
-  ],
+  "limitedFolders": [],
   "enableLogging": false
 }

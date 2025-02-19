@@ -734,51 +734,73 @@ class MoveByTagSettingTab extends PluginSettingTab {
 
   private displayFolderSuggestions(folders: string[]) {
     // Clear previous suggestions
-    const suggestionsContainer = document.getElementById('folder-suggestions');
-    if (suggestionsContainer) {
-      suggestionsContainer.remove();
-    }
+    const existingSuggestions = document.querySelectorAll('.folder-suggestions-container');
+    existingSuggestions.forEach(el => el.remove());
+
+    if (folders.length === 0) return;
 
     // Create a new suggestions container
     const newContainer = document.createElement('div');
-    newContainer.id = 'folder-suggestions';
+    newContainer.className = 'folder-suggestions-container';
     newContainer.style.position = 'absolute';
-    newContainer.style.backgroundColor = 'white';
-    newContainer.style.border = '1px solid #ccc';
+    newContainer.style.backgroundColor = 'var(--background-primary)';
+    newContainer.style.border = '1px solid var(--background-modifier-border)';
+    newContainer.style.borderRadius = '4px';
     newContainer.style.zIndex = '1000';
+    newContainer.style.boxShadow = '0 2px 8px var(--background-modifier-box-shadow)';
 
     // Add suggestions to the container
     folders.forEach(folder => {
       const suggestionItem = document.createElement('div');
+      suggestionItem.className = 'folder-suggestion-item';
       suggestionItem.textContent = folder;
-      suggestionItem.style.padding = '5px';
+      suggestionItem.style.padding = '8px 12px';
       suggestionItem.style.cursor = 'pointer';
+      suggestionItem.style.transition = 'background-color 0.1s ease';
 
-      // Add click event to select folder
+      // Hover effect
+      suggestionItem.addEventListener('mouseover', () => {
+        suggestionItem.style.backgroundColor = 'var(--background-modifier-hover)';
+      });
+      suggestionItem.addEventListener('mouseout', () => {
+        suggestionItem.style.backgroundColor = '';
+      });
+
+      // Click event
       suggestionItem.addEventListener('click', () => {
-        this.folderInput.setValue(folder); // Set the input value to the selected folder
-        newContainer.remove(); // Remove suggestions after selection
+        this.folderInput.setValue(folder);
+        newContainer.remove();
       });
 
       newContainer.appendChild(suggestionItem);
     });
 
-    // Position the suggestions container under the input field
+    // Position the suggestions container
     const inputEl = this.folderInput.inputEl;
     const rect = inputEl.getBoundingClientRect();
-    const modalEl = document.querySelector('.modal');
-    const modalWidth = modalEl ? modalEl.getBoundingClientRect().width : 500;
-    newContainer.style.position = 'absolute';
+    const modalEl = inputEl.closest('.modal');
+    const modalRect = modalEl?.getBoundingClientRect();
+    
+    newContainer.style.position = 'fixed';
     newContainer.style.left = `${rect.left}px`;
-    newContainer.style.top = `${rect.bottom}px`;
-    newContainer.style.width = `${Math.min(modalWidth - 40, 300)}px`; // Use modal width minus padding, max 500px
+    newContainer.style.top = `${rect.bottom + 4}px`; // Add small gap
+    newContainer.style.width = `${Math.min(modalRect ? modalRect.width - 40 : 300, 300)}px`;
     newContainer.style.maxHeight = '200px';
     newContainer.style.overflowY = 'auto';
     newContainer.style.overflowX = 'hidden';
-    newContainer.style.textOverflow = 'ellipsis';
-    newContainer.style.whiteSpace = 'nowrap';
-    
-    // Append the suggestions container
+
+    // Add click outside listener
+    const clickOutsideHandler = (e: MouseEvent) => {
+      if (!newContainer.contains(e.target as Node) && e.target !== inputEl) {
+        newContainer.remove();
+        document.removeEventListener('click', clickOutsideHandler);
+      }
+    };
+    // Delay adding the click listener to prevent immediate triggering
+    setTimeout(() => {
+      document.addEventListener('click', clickOutsideHandler);
+    }, 0);
+
     document.body.appendChild(newContainer);
   }
 
