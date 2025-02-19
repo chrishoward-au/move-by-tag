@@ -1,5 +1,7 @@
 import { Plugin, Modal, App, Command, Setting, Notice, TFile, PluginSettingTab, TextComponent } from 'obsidian';
 
+console.log('Loading Move by Tag Plugin');
+
 interface TagMapping {
   tags: string[];
   folder: string;
@@ -36,7 +38,6 @@ export default class MoveByTag extends Plugin {
   }
 
   async onload() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS);
     await this.loadSettings();
 
     // This adds a command to the app's command palette.
@@ -138,6 +139,9 @@ export default class MoveByTag extends Plugin {
       // If not in old format, assign directly
       this.settings.tagMappings = loadedData.tagMappings || [];
     }
+
+    console.log('Loaded excluded folders:', loadedData.excludedFolders);
+    console.log('Loaded limited folders:', loadedData.limitedFolders);
 
     // Merge with default settings
     this.settings = { ...DEFAULT_SETTINGS, ...this.settings };
@@ -509,15 +513,18 @@ class MoveByTagSettingTab extends PluginSettingTab {
     });
 
     new Setting(containerEl)
-      .addTextArea(text => text
-        .setValue(this.plugin.settings.excludedFolders.join('\n'))
-        .setPlaceholder('folder1/subfolder\nfolder2')
-        .onChange(async (value) => {
-          this.plugin.settings.excludedFolders = value.split('\n')
-            .map(f => f.trim())
-            .filter(f => f.length > 0);
-          await this.plugin.saveSettings();
-        }));
+      .addTextArea(text => {
+        // Set initial value from settings
+        const excludedFolders = this.plugin.settings.excludedFolders || [];
+        text.setValue(excludedFolders.join('\n'))
+          .setPlaceholder('folder1/subfolder\nfolder2')
+          .onChange(async (value) => {
+            this.plugin.settings.excludedFolders = value.split('\n')
+              .map(f => f.trim())
+              .filter(f => f.length > 0);
+            await this.plugin.saveSettings();
+          });
+      });
 
     // Specific Folders Section
     containerEl.createEl('h3', { text: 'Specific Folders' });
@@ -527,15 +534,18 @@ class MoveByTagSettingTab extends PluginSettingTab {
     });
 
     new Setting(containerEl)
-      .addTextArea(text => text
-        .setValue(this.plugin.settings.limitedFolders.join('\n'))
-        .setPlaceholder('folder1/subfolder\nfolder2')
-        .onChange(async (value) => {
-          this.plugin.settings.limitedFolders = value.split('\n')
-            .map(f => f.trim())
-            .filter(f => f.length > 0);
-          await this.plugin.saveSettings();
-        }));
+      .addTextArea(text => {
+        // Set initial value from settings
+        const limitedFolders = this.plugin.settings.limitedFolders || [];
+        text.setValue(limitedFolders.join('\n'))
+          .setPlaceholder('folder1/subfolder\nfolder2')
+          .onChange(async (value) => {
+            this.plugin.settings.limitedFolders = value.split('\n')
+              .map(f => f.trim())
+              .filter(f => f.length > 0);
+            await this.plugin.saveSettings();
+          });
+      });
 
     // Tag Mappings Section
     containerEl.createEl('h3', { text: 'Tag Mappings' });
@@ -708,7 +718,6 @@ class MoveByTagSettingTab extends PluginSettingTab {
       .filter(path => path.toLowerCase().includes(query.toLowerCase()))
       .sort();
     
-    console.log('Filtered folder paths:', folderPaths);
     return folderPaths;
   }
 

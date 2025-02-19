@@ -1,0 +1,34 @@
+{
+  "tagMappings": [
+    {
+      "id": "m7785upkwxcsq3qswmk",
+      "tags": [
+        "articles"
+      ],
+      "folder": "Inbox"
+    },
+    {
+      "id": "m7786ggp9x6eyzhi5iu",
+      "tags": [
+        "articles",
+        "coding"
+      ],
+      "folder": "Writing/Articles/Coding"
+    },
+    {
+      "id": "m77f9ou764czoqlffvy",
+      "tags": [
+        "misc"
+      ],
+      "folder": "Development/Coding"
+    }
+  ],
+  "confirmBeforeMove": false,
+  "excludedFolders": [
+    "xxxx"
+  ],
+  "limitedFolders": [
+    "/Inbox"
+  ],
+  "enableLogging": false
+}
