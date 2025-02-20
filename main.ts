@@ -493,19 +493,21 @@ class MoveByTagSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
-  private createFolderInputSetting(parentEl: HTMLElement, placeholder: string): TextComponent {
-    const folderSetting = new Setting(parentEl)
-        .setName('Destination Folder')
-        .addText((text) => {
-            this.folderInput = text;
-            text.setPlaceholder(placeholder);
-            text.inputEl.style.width = '300px'; // Make input field wider
-            text.onChange(async (value) => {
-                const results = await this.searchFolders(value);
-                this.displayFolderSuggestions(results);
-            });
-        });
-    return this.folderInput;
+  private createFolderInputSetting(parentEl: HTMLElement, placeholder: string, label: string): TextComponent {
+      let textComponent: TextComponent | null = null;
+      new Setting(parentEl)
+          .setName(label)
+          .addText((text) => {
+              text.setPlaceholder(placeholder);
+              text.inputEl.style.width = '300px'; // Make input field wider
+              text.onChange(async (value) => {
+                  const results = await this.searchFolders(value);
+                  this.displayFolderSuggestions(results);
+              });
+              textComponent = text;
+          });
+      if (!textComponent) throw new Error('Failed to create text component');
+      return textComponent;
   }
 
   display(): void {
@@ -515,6 +517,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
     // General Settings Section
     containerEl.createEl('h3', { text: 'General Settings' });
 
+    // CONFIRM BEFORE MOVING
     new Setting(containerEl)
       .setName('Confirm Before Moving')
       .setDesc('Show confirmation dialog before moving files')
@@ -525,6 +528,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
+    // ENABLE LOGGING
     new Setting(containerEl)
       .setName('Enable Logging')
       .setDesc('Log file movements to console')
@@ -535,47 +539,52 @@ class MoveByTagSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         }));
 
-    // Excluded Folders Section
+    // EXCLUDED FOLDERS
     containerEl.createEl('h3', { text: 'Excluded Folders' });
     containerEl.createEl('p', {
       text: 'Files in these folders will not be moved. One folder path per line.',
       cls: 'setting-item-description'
     });
 
-    new Setting(containerEl)
-      .addTextArea(text => {
-        // Set initial value from settings
-        const excludedFolders = this.plugin.settings.excludedFolders || [];
-        text.setValue(excludedFolders.join('\n'))
-          .setPlaceholder('folder1/subfolder\nfolder2')
-          .onChange(async (value) => {
-            this.plugin.settings.excludedFolders = value.split('\n')
-              .map(f => f.trim())
-              .filter(f => f.length > 0);
-            await this.plugin.saveSettings();
-          });
-      });
+    // new Setting(containerEl)
+    //   .addTextArea(text => {
+    //     // Set initial value from settings
+    //     const excludedFolders = this.plugin.settings.excludedFolders || [];
+    //     text.setValue(excludedFolders.join('\n'))
+    //       .setPlaceholder('folder1/subfolder\nfolder2')
+    //       .onChange(async (value) => {
+    //         this.plugin.settings.excludedFolders = value.split('\n')
+    //           .map(f => f.trim())
+    //           .filter(f => f.length > 0);
+    //         await this.plugin.saveSettings();
+    //       });
+    //   });
 
-    // Specific Folders Section
+      this.createFolderInputSetting(containerEl, 'Exclude folder/subfolder','Exclude folder');
+
+
+    // SPECIFIC FOLDERS 
     containerEl.createEl('h3', { text: 'Specific Folders' });
     containerEl.createEl('p', {
       text: 'Files will only be moved from these folders. One folder path per line.',
       cls: 'setting-item-description'
     });
 
-    new Setting(containerEl)
-      .addTextArea(text => {
-        // Set initial value from settings
-        const limitedFolders = this.plugin.settings.limitedFolders || [];
-        text.setValue(limitedFolders.join('\n'))
-          .setPlaceholder('folder1/subfolder\nfolder2')
-          .onChange(async (value) => {
-            this.plugin.settings.limitedFolders = value.split('\n')
-              .map(f => f.trim())
-              .filter(f => f.length > 0);
-            await this.plugin.saveSettings();
-          });
-      });
+    // new Setting(containerEl)
+    //   .addTextArea(text => {
+    //     // Set initial value from settings
+    //     const limitedFolders = this.plugin.settings.limitedFolders || [];
+    //     text.setValue(limitedFolders.join('\n'))
+    //       .setPlaceholder('folder1/subfolder\nfolder2')
+    //       .onChange(async (value) => {
+    //         this.plugin.settings.limitedFolders = value.split('\n')
+    //           .map(f => f.trim())
+    //           .filter(f => f.length > 0);
+    //         await this.plugin.saveSettings();
+    //       });
+    //   });
+
+      this.createFolderInputSetting(containerEl, 'Specific folder/subfolder','Specific folder');
 
     // Tag Mappings Section
     containerEl.createEl('h3', { text: 'Tag Mappings' });
@@ -651,7 +660,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
       });
 
     // Folder input for add/edit tag mapping
-    this.createFolderInputSetting(contentEl, 'folder/subfolder');
+    this.createFolderInputSetting(contentEl, 'folder/subfolder', 'Destination Folder');
 
     // Buttons
     new Setting(contentEl)
@@ -663,7 +672,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
         .setCta()
         .onClick(async () => {
           const tagsValue = tagsInput.getValue().trim();
-          const folder = this.folderInput.getValue().trim();
+          const folder = this.createFolderInputSetting(contentEl, 'folder/subfolder', 'Destination Folder').getValue().trim();
 
           if (!tagsValue || !folder) {
             new Notice('Both tags and folder are required');
@@ -765,7 +774,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
 
       // Click event
       suggestionItem.addEventListener('click', () => {
-        this.folderInput.setValue(folder);
+        this.createFolderInputSetting(newContainer, 'folder/subfolder', 'Destination Folder').setValue(folder);
         newContainer.remove();
       });
 
@@ -773,7 +782,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
     });
 
     // Position the suggestions container
-    const inputEl = this.folderInput.inputEl;
+    const inputEl = this.createFolderInputSetting(newContainer, 'folder/subfolder', 'Destination Folder').inputEl;
     const rect = inputEl.getBoundingClientRect();
     const modalEl = inputEl.closest('.modal');
     const modalRect = modalEl?.getBoundingClientRect();
@@ -819,7 +828,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
       });
 
     // Folder input with dropdown
-    this.createFolderInputSetting(contentEl, 'folder/subfolder').setValue(mapping.folder);
+    this.createFolderInputSetting(contentEl, 'folder/subfolder', 'Destination Folder').setValue(mapping.folder);
 
     // Buttons
     new Setting(contentEl)
@@ -831,7 +840,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
         .setCta()
         .onClick(async () => {
           const tagsValue = tagsInput.getValue().trim();
-          const folder = this.folderInput.getValue().trim();
+          const folder = this.createFolderInputSetting(contentEl, 'folder/subfolder', 'Destination Folder').getValue().trim();
 
           if (!tagsValue || !folder) {
             new Notice('Both tags and folder are required');
