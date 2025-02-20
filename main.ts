@@ -493,6 +493,21 @@ class MoveByTagSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
+  private createFolderInputSetting(parentEl: HTMLElement, placeholder: string): TextComponent {
+    const folderSetting = new Setting(parentEl)
+        .setName('Destination Folder')
+        .addText((text) => {
+            this.folderInput = text;
+            text.setPlaceholder(placeholder);
+            text.inputEl.style.width = '300px'; // Make input field wider
+            text.onChange(async (value) => {
+                const results = await this.searchFolders(value);
+                this.displayFolderSuggestions(results);
+            });
+        });
+    return this.folderInput;
+  }
+
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
@@ -635,18 +650,8 @@ class MoveByTagSettingTab extends PluginSettingTab {
         text.setPlaceholder('tag1, tag2, tag3');
       });
 
-    // Folder input
-    const folderSetting = new Setting(contentEl)
-      .setName('Destination Folder')
-      .addText((text) => {
-        this.folderInput = text;
-        text.setPlaceholder('folder/subfolder');
-        text.inputEl.style.width = '300px'; // Make input field wider
-        text.onChange(async (value) => {
-            const results = await this.searchFolders(value);
-            this.displayFolderSuggestions(results);
-          });
-      });
+    // Folder input for add/edit tag mapping
+    this.createFolderInputSetting(contentEl, 'folder/subfolder');
 
     // Buttons
     new Setting(contentEl)
@@ -814,18 +819,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
       });
 
     // Folder input with dropdown
-    const folderSetting = new Setting(contentEl)
-      .setName('Destination Folder')
-      .addText((text) => {
-        this.folderInput = text;
-        text.setPlaceholder('folder/subfolder');
-        text.inputEl.style.width = '300px'; // Make input field wider
-        text.onChange(async (value) => {
-          const results = await this.searchFolders(value);
-          this.displayFolderSuggestions(results);
-        });
-        text.setValue(mapping.folder);
-      });
+    this.createFolderInputSetting(contentEl, 'folder/subfolder').setValue(mapping.folder);
 
     // Buttons
     new Setting(contentEl)
