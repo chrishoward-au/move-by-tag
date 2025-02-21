@@ -24,31 +24,6 @@ A plugin for [Obsidian](https://obsidian.md) that enables organizing and moving 
 3. Use the command palette to trigger note movements
 4. Notes will be automatically moved to their designated folders based on tags
 
-## Development
-
-### Prerequisites
-
-- Node.js
-- npm/yarn
-- Basic knowledge of TypeScript and Obsidian Plugin API
-
-### Setup
-
-1. Clone this repository
-```bash
-git clone <repository-url>
-cd move-by-tag
-```
-
-2. Install dependencies
-```bash
-npm install
-```
-
-3. Build the plugin
-```bash
-npm run build
-```
 
 ### Development Workflow
 
@@ -60,7 +35,6 @@ npm run build
 
 This plugin integrates with:
 - Obsidian API (docs.obsidian.md) for plugin functionality
-- OpenScripture API for any scripture-related content handling
 
 ## Contributing
 
