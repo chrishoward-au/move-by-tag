@@ -48,6 +48,62 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 
+## Architecture Diagrams
+
+### Plugin Architecture
+```mermaid
+classDiagram
+    class MoveByTag {
+        +settings: MoveByTagSettings
+        +onload()
+        +onunload()
+        +loadSettings()
+        +saveSettings()
+    }
+    class MoveByTagSettings {
+        +tagMappings: TagMapping[]
+        +confirmBeforeMove: boolean
+        +excludedFolders: string[]
+        +limitedFolders: string[]
+        +enableLogging: boolean
+    }
+    class TagMapping {
+        +tags: string[]
+        +folder: string
+        +id: string
+    }
+    MoveByTag --> MoveByTagSettings
+    MoveByTagSettings --> TagMapping
+```
+
+### Data Flow
+```mermaid
+sequenceDiagram
+    User->>+MoveByTag: Execute Command
+    MoveByTag->>+Vault: Get Active File
+    Vault-->>-MoveByTag: File Content
+    MoveByTag->>+MoveByTag: Extract Tags
+    MoveByTag->>+Settings: Get Tag Mappings
+    Settings-->>-MoveByTag: Mappings
+    MoveByTag->>+Vault: Move Files
+    Vault-->>-MoveByTag: Success/Failure
+    MoveByTag-->>-User: Show Result
+```
+
+### Settings Management
+```mermaid
+stateDiagram-v2
+    [*] --> Initializing
+    Initializing --> LoadingSettings
+    LoadingSettings --> SettingsLoaded
+    SettingsLoaded --> Ready
+    Ready --> UpdatingSettings
+    UpdatingSettings --> SavingSettings
+    SavingSettings --> SettingsSaved
+    SettingsSaved --> Ready
+    Ready --> [*]
+```
+
 ---
 Built with:
 - Svelte 5
