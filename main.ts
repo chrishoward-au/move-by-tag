@@ -63,13 +63,11 @@ export default class MoveByTag extends Plugin {
       name: 'Show File Info',
       checkCallback: (checking: boolean) => {
         const activeFile = this.app.workspace.getActiveFile();
-        if (activeFile) {
-          if (!checking) {
-            this.showFileInfo(activeFile);
-          }
-          return true;
+        if (!activeFile) return false;
+        if (!checking) {
+          this.showFileInfo(activeFile);
         }
-        return false;
+        return true;
       }
     });
 
@@ -86,76 +84,80 @@ export default class MoveByTag extends Plugin {
     // await this.saveData({}); // Clear all stored data
   }
 
+  /**
+   * Extracts all tags from a given string.
+   * @param content - The string to search for tags.
+   * @returns An array of tags (e.g., ['#tag1', '#tag2']).
+   */
   extractTags(content: string): string[] {
     const tagRegex = /#\w+/g;
     return content.match(tagRegex) || [];
   }
 
-  async showFileInfo(file: any) {
-    const content = await this.app.vault.read(file);
-    this.showFileInfoDialog(file.path, content);
+  private getFileInfo(filePath: string, content: string) {
+    return {
+      fileName: filePath.split('/').pop(),
+      tags: this.extractTags(content)
+    };
   }
 
-  showFileInfoDialog(filePath: string, content: string) {
-    const fileName = filePath.split('/').pop();
-    const tags = this.extractTags(content);
+  async showFileInfo(file: any) {
+    const content = await this.app.vault.read(file);
+    const fileInfo = this.getFileInfo(file.path, content);
+    this.showFileInfoDialog(fileInfo.fileName, fileInfo.tags);
+  }
 
-    const dialogContent = `File Name: ${fileName}\nLocation: ${filePath}\nTags: ${tags.join(', ')}`;
+  showFileInfoDialog(fileName: string, tags: string[]) {
+    const dialogContent = `File Name: ${fileName}\nTags: ${tags.join(', ')}`;
 
     const dialog = new InfoDialog(this.app, dialogContent);
     dialog.open();
   }
 
+  /**
+   * Loads settings from storage or initializes with defaults.
+   */
   async loadSettings() {
     const loadedData = await this.loadData();
-    console.log('Loaded settings data:', loadedData);
 
     // Initialize settings with defaults
-    this.settings = { ...DEFAULT_SETTINGS };
+    this.settings = Object.assign(
+      {},
+      DEFAULT_SETTINGS,
+      this.settings,
+      {
+        confirmBeforeMove: loadedData?.confirmBeforeMove,
+        excludedFolders: loadedData?.excludedFolders,
+        limitedFolders: loadedData?.limitedFolders,
+        enableLogging: loadedData?.enableLogging
+      }
+    );
+
+    console.log('Loaded settings:', {
+      data: loadedData,
+      excludedFolders: this.settings.excludedFolders,
+      limitedFolders: this.settings.limitedFolders
+    });
 
     // Check if tagMappings is an object (old format)
-    if (loadedData && loadedData.tagMappings && typeof loadedData.tagMappings === 'object' && !Array.isArray(loadedData.tagMappings)) {
-      // Convert old format to new format
+    if (loadedData?.tagMappings && typeof loadedData.tagMappings === 'object' && !Array.isArray(loadedData.tagMappings)) {
       const oldMappings: Record<string, string> = loadedData.tagMappings;
-      const convertedMappings: TagMapping[] = [];
+      const folderToTags = Object.entries(oldMappings).reduce((acc, [tag, folder]) => {
+        acc[folder] = acc[folder] || [];
+        acc[folder].push(tag);
+        return acc;
+      }, {} as Record<string, string[]>);
 
-      // Group mappings by folder
-      const folderToTags: Record<string, string[]> = {};
-      Object.entries(oldMappings).forEach(([tag, folder]) => {
-        if (!folderToTags[folder]) {
-          folderToTags[folder] = [];
-        }
-        folderToTags[folder].push(tag);
-      });
-
-      // Create new mappings
-      Object.entries(folderToTags).forEach(([folder, tags]) => {
-        convertedMappings.push({
-          tags: tags,
-          folder: folder,
-          id: this.generateId()
-        });
-      });
+      const convertedMappings: TagMapping[] = Object.entries(folderToTags).map(([folder, tags]) => ({
+        tags,
+        folder,
+        id: this.generateId()
+      }));
 
       this.settings.tagMappings = convertedMappings;
-    } else if (loadedData && loadedData.tagMappings) {
-      // If not in old format, assign directly
+    } else if (loadedData?.tagMappings) {
       this.settings.tagMappings = loadedData.tagMappings;
     }
-
-    // Merge loaded data with settings
-    if (loadedData) {
-      this.settings = {
-        ...this.settings,
-        confirmBeforeMove: loadedData.confirmBeforeMove ?? DEFAULT_SETTINGS.confirmBeforeMove,
-        excludedFolders: loadedData.excludedFolders ?? DEFAULT_SETTINGS.excludedFolders,
-        limitedFolders: loadedData.limitedFolders ?? DEFAULT_SETTINGS.limitedFolders,
-        enableLogging: loadedData.enableLogging ?? DEFAULT_SETTINGS.enableLogging
-      };
-    }
-
-    console.log('Loaded excluded folders:', this.settings.excludedFolders);
-    console.log('Loaded limited folders:', this.settings.limitedFolders);
   }
 
   async saveSettings() {
