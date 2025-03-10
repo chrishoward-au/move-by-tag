@@ -422,7 +422,7 @@ class MoveByTagModal extends Modal {
 
       const container = modal.contentEl.createEl('div');
       container.createEl('p', {
-        text: `This file matches multiple tag rules. Please select which folder to move it to:`
+        text: 'This file matches multiple tag rules. Please select which folder to move it to:'
       });
 
       const list = container.createEl('div');
@@ -495,18 +495,27 @@ class MoveByTagSettingTab extends PluginSettingTab {
 
   private createFolderInputSetting(parentEl: HTMLElement, placeholder: string, label: string): TextComponent {
       let textComponent: TextComponent | null = null;
-      console.log(parentEl)
-      console.log(this)
-
+      console.log('Creating folder input setting for:', label);
+      
       new Setting(parentEl)
           .setName(label)
           .addText((text) => {
               text.setPlaceholder(placeholder);
               text.inputEl.style.width = '300px'; // Make input field wider
+              
+              // Add a data attribute to help identify this input
+              text.inputEl.setAttribute('data-folder-input', label);
+              
               text.onChange(async (value) => {
-                  console.log(this);
+                  console.log('Input changed:', value);
+                  // Store a reference to this input element to ensure we're using the right one
+                  const inputEl = text.inputEl;
                   const results = await this.searchFolders(value);
-                  this.displayFolderSuggestions(results);
+                  
+                  // Make sure the input is still focused before showing suggestions
+                  if (document.activeElement === inputEl) {
+                      this.displayFolderSuggestions(results);
+                  }
               });
               textComponent = text;
           });
@@ -749,6 +758,23 @@ class MoveByTagSettingTab extends PluginSettingTab {
 
     if (folders.length === 0) return;
 
+    // Find the active input element that triggered this
+    const activeElement = document.activeElement;
+    if (!(activeElement instanceof HTMLInputElement)) {
+      return;
+    }
+
+    // Find the parent .setting-item-control element
+    const settingItemControl = activeElement.closest('.setting-item-control');
+    if (!settingItemControl) {
+      return;
+    }
+    
+    // Set position:relative on the parent element to make absolute positioning work
+    (settingItemControl as HTMLElement).style.position = 'relative';
+    
+    console.log('Setting up suggestions container with parent:', settingItemControl);
+
     // Create a new suggestions container
     const newContainer = document.createElement('div');
     newContainer.className = 'folder-suggestions-container';
@@ -767,6 +793,7 @@ class MoveByTagSettingTab extends PluginSettingTab {
       suggestionItem.style.padding = '8px 12px';
       suggestionItem.style.cursor = 'pointer';
       suggestionItem.style.transition = 'background-color 0.1s ease';
+      suggestionItem.style.textAlign = 'start';
 
       // Hover effect
       suggestionItem.addEventListener('mouseover', () => {
@@ -778,40 +805,61 @@ class MoveByTagSettingTab extends PluginSettingTab {
 
       // Click event
       suggestionItem.addEventListener('click', () => {
-        this.createFolderInputSetting(newContainer, 'folder/subfolder', 'Destination Folder').setValue(folder);
+        // Set the value of the input field
+        activeElement.value = folder;
+        
+        // Trigger an input event to ensure onChange handlers fire
+        const event = new Event('input', { bubbles: true });
+        activeElement.dispatchEvent(event);
+        
+        // Remove the suggestions container
         newContainer.remove();
       });
 
       newContainer.appendChild(suggestionItem);
     });
 
-    // Position the suggestions container
-    const inputEl = this.createFolderInputSetting(newContainer, 'folder/subfolder', 'Destination Folder').inputEl;
-    const rect = inputEl.getBoundingClientRect();
-    const modalEl = inputEl.closest('.modal');
-    const modalRect = modalEl?.getBoundingClientRect();
+    // Position the suggestions container relative to the input element
+    const rect = activeElement.getBoundingClientRect();
+    const controlRect = settingItemControl.getBoundingClientRect();
     
-    newContainer.style.position = 'fixed';
-    newContainer.style.left = `${rect.left}px`;
-    newContainer.style.top = `${rect.bottom + 4}px`; // Add small gap
-    newContainer.style.width = `${Math.min(modalRect ? modalRect.width - 40 : 300, 300)}px`;
+    // Append to the setting-item-control for proper positioning
+    settingItemControl.appendChild(newContainer);
+    
+    // Position below the input field and align to the right
+    newContainer.style.position = 'absolute';
+    newContainer.style.left = ''; // Clear any left value
+    newContainer.style.right = '0'; // Align to the right edge
+    newContainer.style.top = `${rect.height + 4}px`; // Position below input with small gap
+    newContainer.style.width = `${rect.width}px`;
     newContainer.style.maxHeight = '200px';
     newContainer.style.overflowY = 'auto';
     newContainer.style.overflowX = 'hidden';
-
+    
+    // Force a reflow to ensure styles are applied
+    newContainer.offsetHeight;
+    
+    // Double-check that right alignment is maintained
+    console.log('Container styles after positioning:', {
+      position: newContainer.style.position,
+      right: newContainer.style.right,
+      left: newContainer.style.left,
+      top: newContainer.style.top,
+      width: newContainer.style.width
+    });
+    
     // Add click outside listener
     const clickOutsideHandler = (e: MouseEvent) => {
-      if (!newContainer.contains(e.target as Node) && e.target !== inputEl) {
+      if (!newContainer.contains(e.target as Node) && e.target !== activeElement) {
         newContainer.remove();
         document.removeEventListener('click', clickOutsideHandler);
       }
     };
+    
     // Delay adding the click listener to prevent immediate triggering
     setTimeout(() => {
       document.addEventListener('click', clickOutsideHandler);
     }, 0);
-
-    document.body.appendChild(newContainer);
   }
 
   private async showEditMappingModal(mapping: TagMapping): Promise<void> {
