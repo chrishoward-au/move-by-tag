@@ -495,12 +495,16 @@ class MoveByTagSettingTab extends PluginSettingTab {
 
   private createFolderInputSetting(parentEl: HTMLElement, placeholder: string, label: string): TextComponent {
       let textComponent: TextComponent | null = null;
+      console.log(parentEl)
+      console.log(this)
+
       new Setting(parentEl)
           .setName(label)
           .addText((text) => {
               text.setPlaceholder(placeholder);
               text.inputEl.style.width = '300px'; // Make input field wider
               text.onChange(async (value) => {
+                  console.log(this);
                   const results = await this.searchFolders(value);
                   this.displayFolderSuggestions(results);
               });

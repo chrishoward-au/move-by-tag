@@ -48,8 +48,3 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 
----
-Built with:
-- Svelte 5
-- Tailwind CSS 4
-- TypeScript
