@@ -79,6 +79,8 @@ export class FileMovementService {
         if (matches.length > 0) {
           let targetFolder: string | null = matches[0].mapping.folder;
           let hadRuleConflict = false;
+          // Store the matched tags (the ones that triggered the rule)
+          let matchedTags = matches[0].matchedTags;
 
           // If there are multiple matches, show dialog for user to choose
           if (matches.length > 1) {
@@ -91,17 +93,24 @@ export class FileMovementService {
               this.logger(`User skipped file ${file.path} due to rule conflict`);
               new Notice(`Skipped ${file.name} due to rule conflict`);
               
-              // Log skipped file
+              // Log skipped file with all possible matched tags
+              const allMatchedTags = Array.from(new Set(matches.flatMap(m => m.matchedTags)));
               logEntries.push(this.loggingService.createLogEntry(
                 file,
                 null,
-                tags,
+                allMatchedTags,
                 hadRuleConflict,
                 true,
                 SkipReason.RULE_CONFLICT
               ));
               
               continue;
+            } else {
+              // Find which match was selected to get the matched tags
+              const selectedMatch = matches.find(m => m.mapping.folder === targetFolder);
+              if (selectedMatch) {
+                matchedTags = selectedMatch.matchedTags;
+              }
             }
           }
 
@@ -121,7 +130,7 @@ export class FileMovementService {
             logEntries.push(this.loggingService.createLogEntry(
               file,
               targetPath,
-              tags,
+              matchedTags,
               hadRuleConflict,
               true,
               SkipReason.ALREADY_IN_PLACE
@@ -142,7 +151,7 @@ export class FileMovementService {
               logEntries.push(this.loggingService.createLogEntry(
                 file,
                 targetPath,
-                tags,
+                matchedTags,
                 hadRuleConflict,
                 true,
                 SkipReason.FILE_EXISTS
@@ -159,7 +168,7 @@ export class FileMovementService {
           logEntries.push(this.loggingService.createLogEntry(
             file,
             targetPath,
-            tags,
+            matchedTags,
             hadRuleConflict,
             false
           ));
@@ -170,7 +179,7 @@ export class FileMovementService {
           logEntries.push(this.loggingService.createLogEntry(
             file,
             null,
-            tags,
+            [], // No matched tags
             false,
             true,
             SkipReason.NO_MATCHING_RULES

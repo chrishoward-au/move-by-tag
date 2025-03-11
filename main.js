@@ -520,6 +520,12 @@ var LoggingService = class {
     }
   }
   /**
+   * Format tags for Obsidian compatibility
+   */
+  formatTags(tags) {
+    return tags.map((tag) => `#${tag}`).join(" ");
+  }
+  /**
    * Save log entries to a Markdown file
    */
   async saveLogEntries(operationType, entries) {
@@ -532,14 +538,15 @@ var LoggingService = class {
     mdContent += `Generated: ${this.getTimestamp()}
 
 `;
-    mdContent += `| File Name | Source Path | Destination Path | Tags | Status | Reason |
+    mdContent += `| File Name | Source Path | Destination Path | Triggering Tags | Status | Notes |
 `;
-    mdContent += `| --------- | ----------- | ---------------- | ---- | ------ | ------ |
+    mdContent += `| --------- | ----------- | ---------------- | --------------- | ------ | ----- |
 `;
     for (const entry of entries) {
       const status = this.getStatusIndicator(entry);
       const reason = entry.skipReason || (entry.hadRuleConflict ? "Rule conflict resolved" : "");
-      mdContent += `| ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${this.escapeMarkdownField(entry.tags.join(", "))} | ${status} | ${reason} |
+      const formattedTags = this.formatTags(entry.tags);
+      mdContent += `| ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${formattedTags} | ${status} | ${reason} |
 `;
     }
     const movedCount = entries.filter((e) => !e.wasSkipped).length;
@@ -624,6 +631,7 @@ var FileMovementService = class {
         if (matches.length > 0) {
           let targetFolder = matches[0].mapping.folder;
           let hadRuleConflict = false;
+          let matchedTags = matches[0].matchedTags;
           if (matches.length > 1) {
             hadRuleConflict = true;
             ruleConflicts[file.path] = true;
@@ -632,15 +640,21 @@ var FileMovementService = class {
             if (!targetFolder) {
               this.logger(`User skipped file ${file.path} due to rule conflict`);
               new import_obsidian2.Notice(`Skipped ${file.name} due to rule conflict`);
+              const allMatchedTags = Array.from(new Set(matches.flatMap((m) => m.matchedTags)));
               logEntries.push(this.loggingService.createLogEntry(
                 file,
                 null,
-                tags,
+                allMatchedTags,
                 hadRuleConflict,
                 true,
                 "Rule conflict" /* RULE_CONFLICT */
               ));
               continue;
+            } else {
+              const selectedMatch = matches.find((m) => m.mapping.folder === targetFolder);
+              if (selectedMatch) {
+                matchedTags = selectedMatch.matchedTags;
+              }
             }
           }
           this.logger(`Selected target folder: ${targetFolder}`);
@@ -654,7 +668,7 @@ var FileMovementService = class {
             logEntries.push(this.loggingService.createLogEntry(
               file,
               targetPath,
-              tags,
+              matchedTags,
               hadRuleConflict,
               true,
               "Already in correct folder" /* ALREADY_IN_PLACE */
@@ -669,7 +683,7 @@ var FileMovementService = class {
               logEntries.push(this.loggingService.createLogEntry(
                 file,
                 targetPath,
-                tags,
+                matchedTags,
                 hadRuleConflict,
                 true,
                 "File exists at destination" /* FILE_EXISTS */
@@ -682,7 +696,7 @@ var FileMovementService = class {
           logEntries.push(this.loggingService.createLogEntry(
             file,
             targetPath,
-            tags,
+            matchedTags,
             hadRuleConflict,
             false
           ));
@@ -691,7 +705,8 @@ var FileMovementService = class {
           logEntries.push(this.loggingService.createLogEntry(
             file,
             null,
-            tags,
+            [],
+            // No matched tags
             false,
             true,
             "No matching rules" /* NO_MATCHING_RULES */

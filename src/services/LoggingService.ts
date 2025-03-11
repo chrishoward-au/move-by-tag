@@ -170,6 +170,14 @@ export class LoggingService {
   }
   
   /**
+   * Format tags for Obsidian compatibility
+   */
+  private formatTags(tags: string[]): string {
+    // Add # prefix to each tag and join with spaces
+    return tags.map(tag => `#${tag}`).join(' ');
+  }
+  
+  /**
    * Save log entries to a Markdown file
    */
   public async saveLogEntries(
@@ -186,15 +194,16 @@ export class LoggingService {
     mdContent += `Generated: ${this.getTimestamp()}\n\n`;
     
     // Create table header
-    mdContent += `| File Name | Source Path | Destination Path | Tags | Status | Reason |\n`;
-    mdContent += `| --------- | ----------- | ---------------- | ---- | ------ | ------ |\n`;
+    mdContent += `| File Name | Source Path | Destination Path | Triggering Tags | Status | Notes |\n`;
+    mdContent += `| --------- | ----------- | ---------------- | --------------- | ------ | ----- |\n`;
     
     // Add entries
     for (const entry of entries) {
       const status = this.getStatusIndicator(entry);
       const reason = entry.skipReason || (entry.hadRuleConflict ? 'Rule conflict resolved' : '');
+      const formattedTags = this.formatTags(entry.tags);
       
-      mdContent += `| ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${this.escapeMarkdownField(entry.tags.join(', '))} | ${status} | ${reason} |\n`;
+      mdContent += `| ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${formattedTags} | ${status} | ${reason} |\n`;
     }
     
     // Add summary
