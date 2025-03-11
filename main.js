@@ -571,9 +571,9 @@ var LoggingService = class {
     switch (operationType) {
       case "SFL" /* SINGLE_FILE */:
         return "Single File Move";
-      case "CFD" /* CURRENT_FOLDER */:
+      case "CFO" /* CURRENT_FOLDER */:
         return "Current Folder Move";
-      case "AFL" /* ALL_FOLDERS */:
+      case "ALL" /* ALL_FOLDERS */:
         return "All Folders Move";
       default:
         return "File Movement";
@@ -787,10 +787,10 @@ var FileMovementService = class {
       case "single_file" /* SINGLE_FILE */:
         return "SFL" /* SINGLE_FILE */;
       case "current_folder" /* CURRENT_FOLDER */:
-        return "CFD" /* CURRENT_FOLDER */;
+        return "CFO" /* CURRENT_FOLDER */;
       case "all_folders" /* ALL_FOLDERS */:
       default:
-        return "AFL" /* ALL_FOLDERS */;
+        return "ALL" /* ALL_FOLDERS */;
     }
   }
   /**

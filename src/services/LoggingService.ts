@@ -6,8 +6,8 @@ import { TagMappingMatch } from '../models/types';
  */
 export enum MoveOperationType {
   SINGLE_FILE = 'SFL', // Single file move
-  CURRENT_FOLDER = 'CFD', // Current folder move
-  ALL_FOLDERS = 'AFL', // All folders move
+  CURRENT_FOLDER = 'CFO', // Current folder move
+  ALL_FOLDERS = 'ALL', // All folders move
 }
 
 /**
@@ -152,7 +152,7 @@ export class LoggingService {
     if (!entry.wasSkipped) {
       return StatusIndicator.SUCCESS; // Green for successful moves
     }
-    
+
     // Determine which skipped files get orange vs. red
     switch (entry.skipReason) {
       case SkipReason.ALREADY_IN_PLACE:
@@ -167,6 +167,9 @@ export class LoggingService {
       default:
         return StatusIndicator.ERROR; // Red for errors and user interventions
     }
+
+    
+
   }
   
   /**
