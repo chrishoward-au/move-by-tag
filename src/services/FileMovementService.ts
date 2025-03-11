@@ -2,6 +2,7 @@ import { App, Modal, Notice, TFile } from 'obsidian';
 import { FileMovement, MoveByTagSettings, TagMappingMatch, MoveScope } from '../models/types';
 import { FileUtils } from '../utils/FileUtils';
 import { TagMappingService } from './TagMappingService';
+import { LoggingService, MoveOperationType, LogEntry } from './LoggingService';
 
 export class FileMovementService {
   private app: App;
@@ -9,6 +10,7 @@ export class FileMovementService {
   private fileUtils: FileUtils;
   private tagMappingService: TagMappingService;
   private logger: (message: string) => void;
+  private loggingService: LoggingService;
 
   constructor(
     app: App,
@@ -22,6 +24,7 @@ export class FileMovementService {
     this.fileUtils = fileUtils;
     this.tagMappingService = tagMappingService;
     this.logger = logger;
+    this.loggingService = new LoggingService(app);
   }
 
   /**
@@ -36,6 +39,9 @@ export class FileMovementService {
   ): Promise<{total: number, moved: number}> {
     this.logger(`Starting file movement process with scope: ${scope}`);
     
+    // Determine the operation type for logging
+    const operationType = this.getMoveOperationType(scope);
+    
     // Get the files to process based on scope
     const filesToProcess = await this.getFilesToProcess(scope, contextFile);
     
@@ -48,6 +54,10 @@ export class FileMovementService {
     this.logger(`Found ${filesToProcess.length} files to process`);
     
     const movements: FileMovement[] = [];
+    const logEntries: LogEntry[] = [];
+    
+    // Track rule conflicts for logging
+    const ruleConflicts: Record<string, boolean> = {};
 
     // Plan all movements
     for (const file of filesToProcess) {
@@ -68,15 +78,28 @@ export class FileMovementService {
 
         if (matches.length > 0) {
           let targetFolder: string | null = matches[0].mapping.folder;
+          let hadRuleConflict = false;
 
           // If there are multiple matches, show dialog for user to choose
           if (matches.length > 1) {
+            hadRuleConflict = true;
+            ruleConflicts[file.path] = true;
             this.logger(`Found multiple matching folders for ${file.path}: ${matches.map(m => m.mapping.folder).join(', ')}`);
             targetFolder = await this.showRuleConflictDialog(file, matches);
 
             if (!targetFolder) {
               this.logger(`User skipped file ${file.path} due to rule conflict`);
               new Notice(`Skipped ${file.name} due to rule conflict`);
+              
+              // Log skipped file
+              logEntries.push(this.loggingService.createLogEntry(
+                file,
+                null,
+                tags,
+                hadRuleConflict,
+                true
+              ));
+              
               continue;
             }
           }
@@ -88,16 +111,53 @@ export class FileMovementService {
           if (await this.app.vault.adapter.exists(targetPath)) {
             this.logger(`File already exists at target location: ${targetPath}`);
             new Notice(`Skipping ${file.name}: File already exists in target location`);
+            
+            // Log skipped file due to existing file
+            logEntries.push(this.loggingService.createLogEntry(
+              file,
+              targetPath,
+              tags,
+              hadRuleConflict,
+              true
+            ));
+            
             continue;
           }
 
           this.logger(`Planning to move ${file.path} to ${targetPath}`);
           movements.push({ file, targetPath });
+          
+          // Add to log entries (will update status after actual move)
+          logEntries.push(this.loggingService.createLogEntry(
+            file,
+            targetPath,
+            tags,
+            hadRuleConflict,
+            false
+          ));
         } else {
           this.logger(`No matching folder found for tags: ${tags.join(', ')}`);
+          
+          // Log file with no matching folder
+          logEntries.push(this.loggingService.createLogEntry(
+            file,
+            null,
+            tags,
+            false,
+            true
+          ));
         }
       } else {
         this.logger(`No tags found in file: ${file.path}`);
+        
+        // Log file with no tags
+        logEntries.push(this.loggingService.createLogEntry(
+          file,
+          null,
+          [],
+          false,
+          true
+        ));
       }
     }
 
@@ -105,6 +165,13 @@ export class FileMovementService {
     if (movements.length === 0) {
       this.logger('No files to move - no valid tag mappings found');
       new Notice('No files to move');
+      
+      // Save log even if no files were moved
+      if (logEntries.length > 0) {
+        const logPath = await this.loggingService.saveLogEntries(operationType, logEntries);
+        this.logger(`Log saved to ${logPath}`);
+      }
+      
       return { total: 0, moved: 0 };
     }
 
@@ -115,6 +182,18 @@ export class FileMovementService {
       const confirmed = await this.showBatchConfirmationDialog(movements);
       if (!confirmed) {
         new Notice('Operation cancelled');
+        
+        // Update log entries to mark all as skipped
+        for (const entry of logEntries) {
+          if (!entry.wasSkipped) {
+            entry.wasSkipped = true;
+          }
+        }
+        
+        // Save log even if operation was cancelled
+        const logPath = await this.loggingService.saveLogEntries(operationType, logEntries);
+        this.logger(`Log saved to ${logPath}`);
+        
         return { total: movements.length, moved: 0 };
       }
     }
@@ -128,11 +207,42 @@ export class FileMovementService {
         this.logger(`Moved ${file.path} to ${targetPath}`);
       } catch (error) {
         new Notice(`Failed to move ${file.name}: ${error.message}`);
+        
+        // Update log entry to mark as skipped
+        const logEntry = logEntries.find(entry => 
+          entry.fileName === file.name && 
+          entry.sourcePath === file.path &&
+          entry.destinationPath === targetPath
+        );
+        
+        if (logEntry) {
+          logEntry.wasSkipped = true;
+        }
       }
     }
 
     new Notice(`Successfully moved ${successCount} of ${movements.length} files`);
+    
+    // Save the log file
+    const logPath = await this.loggingService.saveLogEntries(operationType, logEntries);
+    this.logger(`Log saved to ${logPath}`);
+    
     return { total: movements.length, moved: successCount };
+  }
+
+  /**
+   * Get the move operation type based on scope
+   */
+  private getMoveOperationType(scope: MoveScope): MoveOperationType {
+    switch (scope) {
+      case MoveScope.SINGLE_FILE:
+        return MoveOperationType.SINGLE_FILE;
+      case MoveScope.CURRENT_FOLDER:
+        return MoveOperationType.CURRENT_FOLDER;
+      case MoveScope.ALL_FOLDERS:
+      default:
+        return MoveOperationType.ALL_FOLDERS;
+    }
   }
 
   /**

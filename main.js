@@ -432,6 +432,96 @@ var import_obsidian3 = require("obsidian");
 
 // src/services/FileMovementService.ts
 var import_obsidian2 = require("obsidian");
+
+// src/services/LoggingService.ts
+var LoggingService = class {
+  constructor(app) {
+    this.logFolderPath = "Resources/Logs/MoveByTag";
+    this.app = app;
+  }
+  /**
+   * Ensure the log directory exists
+   */
+  async ensureLogDirectory() {
+    const adapter = this.app.vault.adapter;
+    if (!await adapter.exists("Resources")) {
+      await adapter.mkdir("Resources");
+    }
+    if (!await adapter.exists("Resources/Logs")) {
+      await adapter.mkdir("Resources/Logs");
+    }
+    if (!await adapter.exists(this.logFolderPath)) {
+      await adapter.mkdir(this.logFolderPath);
+    }
+  }
+  /**
+   * Generate a timestamp in YYYYMMDD HH:MM:SS format
+   */
+  getTimestamp() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    const seconds = String(now.getSeconds()).padStart(2, "0");
+    return `${year}${month}${day} ${hours}:${minutes}:${seconds}`;
+  }
+  /**
+   * Generate a log filename based on operation type and current date/time
+   */
+  getLogFilename(operationType) {
+    const timestamp = this.getTimestamp().replace(":", "").replace(":", "");
+    return `${operationType}_${timestamp}.csv`;
+  }
+  /**
+   * Create a log entry for a file movement
+   */
+  createLogEntry(file, destinationPath, tags, hadRuleConflict, wasSkipped) {
+    return {
+      timestamp: this.getTimestamp(),
+      fileName: file.name,
+      sourcePath: file.path,
+      destinationPath: destinationPath || "",
+      tags,
+      hadRuleConflict,
+      wasSkipped
+    };
+  }
+  /**
+   * Save log entries to a CSV file
+   */
+  async saveLogEntries(operationType, entries) {
+    await this.ensureLogDirectory();
+    const filename = this.getLogFilename(operationType);
+    const fullPath = `${this.logFolderPath}/${filename}`;
+    let csvContent = "Timestamp,File Name,Source Path,Destination Path,Tags,Had Rule Conflict,Was Skipped\n";
+    for (const entry of entries) {
+      csvContent += [
+        entry.timestamp,
+        this.escapeCsvField(entry.fileName),
+        this.escapeCsvField(entry.sourcePath),
+        this.escapeCsvField(entry.destinationPath),
+        this.escapeCsvField(entry.tags.join(", ")),
+        entry.hadRuleConflict ? "Yes" : "No",
+        entry.wasSkipped ? "Yes" : "No"
+      ].join(",") + "\n";
+    }
+    await this.app.vault.adapter.write(fullPath, csvContent);
+    return fullPath;
+  }
+  /**
+   * Escape a field for CSV output
+   */
+  escapeCsvField(field) {
+    if (/[",\n\r]/.test(field)) {
+      return `"${field.replace(/"/g, '""')}"`;
+    }
+    return field;
+  }
+};
+
+// src/services/FileMovementService.ts
 var FileMovementService = class {
   constructor(app, settings, fileUtils, tagMappingService, logger) {
     this.app = app;
@@ -439,6 +529,7 @@ var FileMovementService = class {
     this.fileUtils = fileUtils;
     this.tagMappingService = tagMappingService;
     this.logger = logger;
+    this.loggingService = new LoggingService(app);
   }
   /**
    * Move files based on their tags
@@ -448,6 +539,7 @@ var FileMovementService = class {
    */
   async moveFiles(scope = "all_folders" /* ALL_FOLDERS */, contextFile) {
     this.logger(`Starting file movement process with scope: ${scope}`);
+    const operationType = this.getMoveOperationType(scope);
     const filesToProcess = await this.getFilesToProcess(scope, contextFile);
     if (filesToProcess.length === 0) {
       this.logger("No files to process");
@@ -456,6 +548,8 @@ var FileMovementService = class {
     }
     this.logger(`Found ${filesToProcess.length} files to process`);
     const movements = [];
+    const logEntries = [];
+    const ruleConflicts = {};
     for (const file of filesToProcess) {
       this.logger(`Processing file: ${file.path}`);
       if (scope === "all_folders" /* ALL_FOLDERS */ && this.fileUtils.isInExcludedFolder(file.path, this.settings.excludedFolders)) {
@@ -468,12 +562,22 @@ var FileMovementService = class {
         const matches = this.tagMappingService.getTargetFolderForTags(tags, this.settings.tagMappings);
         if (matches.length > 0) {
           let targetFolder = matches[0].mapping.folder;
+          let hadRuleConflict = false;
           if (matches.length > 1) {
+            hadRuleConflict = true;
+            ruleConflicts[file.path] = true;
             this.logger(`Found multiple matching folders for ${file.path}: ${matches.map((m) => m.mapping.folder).join(", ")}`);
             targetFolder = await this.showRuleConflictDialog(file, matches);
             if (!targetFolder) {
               this.logger(`User skipped file ${file.path} due to rule conflict`);
               new import_obsidian2.Notice(`Skipped ${file.name} due to rule conflict`);
+              logEntries.push(this.loggingService.createLogEntry(
+                file,
+                null,
+                tags,
+                hadRuleConflict,
+                true
+              ));
               continue;
             }
           }
@@ -482,20 +586,52 @@ var FileMovementService = class {
           if (await this.app.vault.adapter.exists(targetPath)) {
             this.logger(`File already exists at target location: ${targetPath}`);
             new import_obsidian2.Notice(`Skipping ${file.name}: File already exists in target location`);
+            logEntries.push(this.loggingService.createLogEntry(
+              file,
+              targetPath,
+              tags,
+              hadRuleConflict,
+              true
+            ));
             continue;
           }
           this.logger(`Planning to move ${file.path} to ${targetPath}`);
           movements.push({ file, targetPath });
+          logEntries.push(this.loggingService.createLogEntry(
+            file,
+            targetPath,
+            tags,
+            hadRuleConflict,
+            false
+          ));
         } else {
           this.logger(`No matching folder found for tags: ${tags.join(", ")}`);
+          logEntries.push(this.loggingService.createLogEntry(
+            file,
+            null,
+            tags,
+            false,
+            true
+          ));
         }
       } else {
         this.logger(`No tags found in file: ${file.path}`);
+        logEntries.push(this.loggingService.createLogEntry(
+          file,
+          null,
+          [],
+          false,
+          true
+        ));
       }
     }
     if (movements.length === 0) {
       this.logger("No files to move - no valid tag mappings found");
       new import_obsidian2.Notice("No files to move");
+      if (logEntries.length > 0) {
+        const logPath2 = await this.loggingService.saveLogEntries(operationType, logEntries);
+        this.logger(`Log saved to ${logPath2}`);
+      }
       return { total: 0, moved: 0 };
     }
     this.logger(`Found ${movements.length} files to move`);
@@ -503,6 +639,13 @@ var FileMovementService = class {
       const confirmed = await this.showBatchConfirmationDialog(movements);
       if (!confirmed) {
         new import_obsidian2.Notice("Operation cancelled");
+        for (const entry of logEntries) {
+          if (!entry.wasSkipped) {
+            entry.wasSkipped = true;
+          }
+        }
+        const logPath2 = await this.loggingService.saveLogEntries(operationType, logEntries);
+        this.logger(`Log saved to ${logPath2}`);
         return { total: movements.length, moved: 0 };
       }
     }
@@ -514,10 +657,32 @@ var FileMovementService = class {
         this.logger(`Moved ${file.path} to ${targetPath}`);
       } catch (error) {
         new import_obsidian2.Notice(`Failed to move ${file.name}: ${error.message}`);
+        const logEntry = logEntries.find(
+          (entry) => entry.fileName === file.name && entry.sourcePath === file.path && entry.destinationPath === targetPath
+        );
+        if (logEntry) {
+          logEntry.wasSkipped = true;
+        }
       }
     }
     new import_obsidian2.Notice(`Successfully moved ${successCount} of ${movements.length} files`);
+    const logPath = await this.loggingService.saveLogEntries(operationType, logEntries);
+    this.logger(`Log saved to ${logPath}`);
     return { total: movements.length, moved: successCount };
+  }
+  /**
+   * Get the move operation type based on scope
+   */
+  getMoveOperationType(scope) {
+    switch (scope) {
+      case "single_file" /* SINGLE_FILE */:
+        return "SFL" /* SINGLE_FILE */;
+      case "current_folder" /* CURRENT_FOLDER */:
+        return "CFD" /* CURRENT_FOLDER */;
+      case "all_folders" /* ALL_FOLDERS */:
+      default:
+        return "AFL" /* ALL_FOLDERS */;
+    }
   }
   /**
    * Get files to process based on scope
@@ -1003,7 +1168,7 @@ var MoveOptionsModal = class extends import_obsidian4.Modal {
     this.createOptionButton(
       buttonContainer,
       "Move Files in All Folders",
-      "Move files across the vault based on settings (respects folder exclusions)",
+      "Move files across the vault based, respecting Excluded and Specific folder settings",
       async () => {
         this.close();
         await this.fileMovementService.moveFiles("all_folders" /* ALL_FOLDERS */);
