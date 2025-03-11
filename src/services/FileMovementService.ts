@@ -336,6 +336,11 @@ export class FileMovementService {
       // Add some styling to the form
       form.style.marginBottom = '10px';
       
+      // Prevent default form submission
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+      });
+      
       // Create radio buttons for each option
       matches.forEach(({ mapping, matchedTags }, index) => {
         const row = form.createEl('div', { cls: 'move-by-tag-rule-option' });
@@ -393,7 +398,9 @@ export class FileMovementService {
       const submitButton = form.createEl('button', {
         text: 'Continue',
         cls: 'mod-cta',
-        type: 'button' // Prevent form submission
+        attr: {
+          type: 'button' // Explicitly set type to button to prevent form submission
+        }
       });
       
       submitButton.addEventListener('click', () => {

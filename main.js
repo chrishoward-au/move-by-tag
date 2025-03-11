@@ -674,6 +674,9 @@ var FileMovementService = class {
       const list = container.createEl("div");
       const form = list.createEl("form", { cls: "move-by-tag-rule-form" });
       form.style.marginBottom = "10px";
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+      });
       matches.forEach(({ mapping, matchedTags }, index) => {
         const row = form.createEl("div", { cls: "move-by-tag-rule-option" });
         row.style.marginBottom = "10px";
@@ -718,8 +721,10 @@ var FileMovementService = class {
       const submitButton = form.createEl("button", {
         text: "Continue",
         cls: "mod-cta",
-        type: "button"
-        // Prevent form submission
+        attr: {
+          type: "button"
+          // Explicitly set type to button to prevent form submission
+        }
       });
       submitButton.addEventListener("click", () => {
         const selectedRadio = form.querySelector('input[name="folder-option"]:checked');
