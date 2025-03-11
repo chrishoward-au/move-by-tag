@@ -87,7 +87,7 @@ export class MoveOptionsModal extends Modal {
     this.createOptionButton(
       buttonContainer,
       'Move Files in All Folders',
-      'Move files across the vault based on settings (respects folder exclusions)',
+      'Move files across the vault based, respecting Excluded and Specific folder settings',
       async () => {
         this.close();
         await this.fileMovementService.moveFiles(MoveScope.ALL_FOLDERS);
