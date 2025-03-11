@@ -1,8 +1,10 @@
 import { App, Plugin, TFile } from 'obsidian';
-import { MoveByTagSettings } from '../models/types';
+import { MoveByTagSettings, MoveScope } from '../models/types';
 import { MoveByTagModal } from '../ui/MoveByTagModal';
 import { InfoDialog } from '../ui/InfoDialog';
 import { FileUtils } from '../utils/FileUtils';
+import { FileMovementService } from '../services/FileMovementService';
+import { TagMappingService } from '../services/TagMappingService';
 
 export class CommandManager {
   private plugin: Plugin;
@@ -31,6 +33,7 @@ export class CommandManager {
   public registerCommands(): void {
     this.registerMoveByTagCommand();
     this.registerShowFileInfoCommand();
+    this.registerMoveInCurrentFolderCommand();
   }
 
   /**
@@ -39,14 +42,47 @@ export class CommandManager {
   private registerMoveByTagCommand(): void {
     this.plugin.addCommand({
       id: 'move-by-tag',
-      name: 'Move by Tag',
+      name: 'Move by Tag (All Folders)',
       callback: async () => {
-        // Create an instance of MoveByTagModal but don't show it
-        const processor = new MoveByTagModal(this.app, this.settings, this.logger);
+        const fileMovementService = new FileMovementService(
+          this.app,
+          this.settings,
+          this.fileUtils,
+          new TagMappingService(),
+          this.logger
+        );
         
-        // Directly call the moveFilesByTag method without showing the modal
-        await processor.moveFilesByTag();
+        await fileMovementService.moveFiles(MoveScope.ALL_FOLDERS);
       },
+    });
+  }
+
+  /**
+   * Register the Move in Current Folder command
+   */
+  private registerMoveInCurrentFolderCommand(): void {
+    this.plugin.addCommand({
+      id: 'move-in-current-folder',
+      name: 'Move by Tag (Current Folder)',
+      checkCallback: (checking: boolean) => {
+        // Check if there's an active file to determine the current folder
+        const activeFile = this.app.workspace.getActiveFile();
+        if (activeFile) {
+          if (!checking) {
+            const fileMovementService = new FileMovementService(
+              this.app,
+              this.settings,
+              this.fileUtils,
+              new TagMappingService(),
+              this.logger
+            );
+            
+            fileMovementService.moveFiles(MoveScope.CURRENT_FOLDER, activeFile);
+          }
+          return true;
+        }
+        return false;
+      }
     });
   }
 

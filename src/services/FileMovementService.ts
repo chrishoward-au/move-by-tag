@@ -1,5 +1,5 @@
 import { App, Modal, Notice, TFile } from 'obsidian';
-import { FileMovement, MoveByTagSettings, TagMappingMatch } from '../models/types';
+import { FileMovement, MoveByTagSettings, TagMappingMatch, MoveScope } from '../models/types';
 import { FileUtils } from '../utils/FileUtils';
 import { TagMappingService } from './TagMappingService';
 
@@ -25,182 +25,164 @@ export class FileMovementService {
   }
 
   /**
-   * Move a single file based on its tags
+   * Move files based on their tags
+   * @param scope The scope of files to process (single file, current folder, all folders)
+   * @param contextFile The file to use as context (for single file or current folder scope)
+   * @returns Result of the operation
    */
-  public async moveFile(file: TFile): Promise<boolean> {
-    try {
+  public async moveFiles(
+    scope: MoveScope = MoveScope.ALL_FOLDERS, 
+    contextFile?: TFile
+  ): Promise<{total: number, moved: number}> {
+    this.logger(`Starting file movement process with scope: ${scope}`);
+    
+    // Get the files to process based on scope
+    const filesToProcess = await this.getFilesToProcess(scope, contextFile);
+    
+    if (filesToProcess.length === 0) {
+      this.logger('No files to process');
+      new Notice('No files to process');
+      return { total: 0, moved: 0 };
+    }
+    
+    this.logger(`Found ${filesToProcess.length} files to process`);
+    
+    const movements: FileMovement[] = [];
+
+    // Plan all movements
+    for (const file of filesToProcess) {
       this.logger(`Processing file: ${file.path}`);
 
-      // Skip files in excluded folders
-      if (this.fileUtils.isInExcludedFolder(file.path, this.settings.excludedFolders)) {
+      // Skip files in excluded folders (only for ALL_FOLDERS scope)
+      if (scope === MoveScope.ALL_FOLDERS && 
+          this.fileUtils.isInExcludedFolder(file.path, this.settings.excludedFolders)) {
         this.logger(`Skipping excluded file: ${file.path}`);
-        return false;
+        continue;
       }
 
       const tags = await this.fileUtils.extractTagsFromFile(file);
       this.logger(`Found tags in ${file.path}: ${tags.join(', ') || 'none'}`);
 
-      if (tags.length === 0) {
+      if (tags.length > 0) {
+        const matches = this.tagMappingService.getTargetFolderForTags(tags, this.settings.tagMappings);
+
+        if (matches.length > 0) {
+          let targetFolder: string | null = matches[0].mapping.folder;
+
+          // If there are multiple matches, show dialog for user to choose
+          if (matches.length > 1) {
+            this.logger(`Found multiple matching folders for ${file.path}: ${matches.map(m => m.mapping.folder).join(', ')}`);
+            targetFolder = await this.showRuleConflictDialog(file, matches);
+
+            if (!targetFolder) {
+              this.logger(`User skipped file ${file.path} due to rule conflict`);
+              new Notice(`Skipped ${file.name} due to rule conflict`);
+              continue;
+            }
+          }
+
+          this.logger(`Selected target folder: ${targetFolder}`);
+          const targetPath = `${targetFolder}/${file.name}`;
+
+          // Check if file already exists in target
+          if (await this.app.vault.adapter.exists(targetPath)) {
+            this.logger(`File already exists at target location: ${targetPath}`);
+            new Notice(`Skipping ${file.name}: File already exists in target location`);
+            continue;
+          }
+
+          this.logger(`Planning to move ${file.path} to ${targetPath}`);
+          movements.push({ file, targetPath });
+        } else {
+          this.logger(`No matching folder found for tags: ${tags.join(', ')}`);
+        }
+      } else {
         this.logger(`No tags found in file: ${file.path}`);
-        new Notice(`No tags found in file: ${file.name}`);
-        return false;
       }
+    }
 
-      const matches = this.tagMappingService.getTargetFolderForTags(tags, this.settings.tagMappings);
+    // If no files to move, notify and return
+    if (movements.length === 0) {
+      this.logger('No files to move - no valid tag mappings found');
+      new Notice('No files to move');
+      return { total: 0, moved: 0 };
+    }
 
-      if (matches.length === 0) {
-        this.logger(`No matching folder found for tags: ${tags.join(', ')}`);
-        new Notice(`No matching folder found for tags: ${tags.join(', ')}`);
-        return false;
+    this.logger(`Found ${movements.length} files to move`);
+
+    // Show confirmation if enabled
+    if (this.settings.confirmBeforeMove) {
+      const confirmed = await this.showBatchConfirmationDialog(movements);
+      if (!confirmed) {
+        new Notice('Operation cancelled');
+        return { total: movements.length, moved: 0 };
       }
+    }
 
-      let targetFolder: string | null = matches[0].mapping.folder;
-
-      // If there are multiple matches, show dialog for user to choose
-      if (matches.length > 1) {
-        this.logger(`Found multiple matching folders for ${file.path}: ${matches.map(m => m.mapping.folder).join(', ')}`);
-        targetFolder = await this.showRuleConflictDialog(file, matches);
-
-        if (!targetFolder) {
-          this.logger(`User skipped file ${file.path} due to rule conflict`);
-          new Notice(`Skipped ${file.name} due to rule conflict`);
-          return false;
-        }
-      }
-
-      this.logger(`Selected target folder: ${targetFolder}`);
-      const targetPath = `${targetFolder}/${file.name}`;
-
-      // Check if file already exists in target
-      if (await this.app.vault.adapter.exists(targetPath)) {
-        this.logger(`File already exists at target location: ${targetPath}`);
-        new Notice(`Skipping ${file.name}: File already exists in target location`);
-        return false;
-      }
-
-      // Show confirmation if enabled
-      if (this.settings.confirmBeforeMove) {
-        const confirmed = await this.showConfirmationDialog(file, targetPath);
-        if (!confirmed) {
-          new Notice('Operation cancelled');
-          return false;
-        }
-      }
-
-      // Perform the move
+    // Perform movements
+    let successCount = 0;
+    for (const { file, targetPath } of movements) {
       try {
         await this.app.vault.rename(file, targetPath);
+        successCount++;
         this.logger(`Moved ${file.path} to ${targetPath}`);
-        new Notice(`Successfully moved ${file.name} to ${targetFolder}`);
-        return true;
       } catch (error) {
         new Notice(`Failed to move ${file.name}: ${error.message}`);
-        return false;
       }
-    } catch (error) {
-      new Notice(`Error processing file: ${error.message}`);
-      console.error('Move by Tag error:', error);
-      return false;
+    }
+
+    new Notice(`Successfully moved ${successCount} of ${movements.length} files`);
+    return { total: movements.length, moved: successCount };
+  }
+
+  /**
+   * Get files to process based on scope
+   */
+  private async getFilesToProcess(scope: MoveScope, contextFile?: TFile): Promise<TFile[]> {
+    switch (scope) {
+      case MoveScope.SINGLE_FILE:
+        if (!contextFile) {
+          this.logger('No context file provided for single file scope');
+          return [];
+        }
+        return [contextFile];
+        
+      case MoveScope.CURRENT_FOLDER:
+        if (!contextFile) {
+          this.logger('No context file provided for current folder scope');
+          return [];
+        }
+        
+        // Get the current folder path
+        const currentFolder = contextFile.path.substring(0, contextFile.path.lastIndexOf('/'));
+        this.logger(`Processing files in folder: ${currentFolder}`);
+        
+        // Get all markdown files in the current folder
+        return this.app.vault.getMarkdownFiles().filter(file => {
+          const fileFolder = file.path.substring(0, file.path.lastIndexOf('/'));
+          return fileFolder === currentFolder;
+        });
+        
+      case MoveScope.ALL_FOLDERS:
+      default:
+        const files = this.app.vault.getMarkdownFiles();
+        
+        // Apply folder limitations if configured
+        if (this.settings.limitedFolders.length > 0) {
+          return files.filter(file => 
+            this.fileUtils.isInLimitedFolder(file.path, this.settings.limitedFolders)
+          );
+        }
+        
+        return files;
     }
   }
 
   /**
-   * Move multiple files based on their tags
+   * Move a single file based on its tags
    */
-  public async moveFiles(files: TFile[]): Promise<{ success: number; total: number }> {
-    try {
-      this.logger('Starting file movement process...');
-      
-      const movements: FileMovement[] = [];
-
-      // First, plan all movements
-      for (const file of files) {
-        this.logger(`Processing file: ${file.path}`);
-
-        // Skip files in excluded folders
-        if (this.fileUtils.isInExcludedFolder(file.path, this.settings.excludedFolders)) {
-          this.logger(`Skipping excluded file: ${file.path}`);
-          continue;
-        }
-
-        const tags = await this.fileUtils.extractTagsFromFile(file);
-        this.logger(`Found tags in ${file.path}: ${tags.join(', ') || 'none'}`);
-
-        if (tags.length > 0) {
-          const matches = this.tagMappingService.getTargetFolderForTags(tags, this.settings.tagMappings);
-
-          if (matches.length > 0) {
-            let targetFolder: string | null = matches[0].mapping.folder;
-
-            // If there are multiple matches, show dialog for user to choose
-            if (matches.length > 1) {
-              this.logger(`Found multiple matching folders for ${file.path}: ${matches.map(m => m.mapping.folder).join(', ')}`);
-              targetFolder = await this.showRuleConflictDialog(file, matches);
-
-              if (!targetFolder) {
-                this.logger(`User skipped file ${file.path} due to rule conflict`);
-                new Notice(`Skipped ${file.name} due to rule conflict`);
-                continue;
-              }
-            }
-
-            this.logger(`Selected target folder: ${targetFolder}`);
-            const targetPath = `${targetFolder}/${file.name}`;
-
-            // Check if file already exists in target
-            if (await this.app.vault.adapter.exists(targetPath)) {
-              this.logger(`File already exists at target location: ${targetPath}`);
-              new Notice(`Skipping ${file.name}: File already exists in target location`);
-              continue;
-            }
-
-            this.logger(`Planning to move ${file.path} to ${targetPath}`);
-            movements.push({ file, targetPath });
-          } else {
-            this.logger(`No matching folder found for tags: ${tags.join(', ')}`);
-          }
-        } else {
-          this.logger(`No tags found in file: ${file.path}`);
-        }
-      }
-
-      // If no files to move, notify and return
-      if (movements.length === 0) {
-        this.logger('No files to move - no valid tag mappings found');
-        new Notice('No files to move');
-        return { success: 0, total: 0 };
-      }
-
-      this.logger(`Found ${movements.length} files to move`);
-
-      // Show confirmation if enabled
-      if (this.settings.confirmBeforeMove) {
-        const confirmed = await this.showBatchConfirmationDialog(movements);
-        if (!confirmed) {
-          new Notice('Operation cancelled');
-          return { success: 0, total: movements.length };
-        }
-      }
-
-      // Perform movements
-      let successCount = 0;
-      for (const { file, targetPath } of movements) {
-        try {
-          await this.app.vault.rename(file, targetPath);
-          successCount++;
-          this.logger(`Moved ${file.path} to ${targetPath}`);
-        } catch (error) {
-          new Notice(`Failed to move ${file.name}: ${error.message}`);
-        }
-      }
-
-      new Notice(`Successfully moved ${successCount} of ${movements.length} files`);
-      return { success: successCount, total: movements.length };
-    } catch (error) {
-      new Notice(`Error during file movement: ${error.message}`);
-      console.error('Move by Tag error:', error);
-      return { success: 0, total: 0 };
-    }
+  public async moveFile(file: TFile): Promise<{total: number, moved: number}> {
+    return this.moveFiles(MoveScope.SINGLE_FILE, file);
   }
 
   /**

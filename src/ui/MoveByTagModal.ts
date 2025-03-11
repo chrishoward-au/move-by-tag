@@ -1,5 +1,5 @@
 import { App, Modal } from 'obsidian';
-import { MoveByTagSettings } from '../models/types';
+import { MoveByTagSettings, MoveScope } from '../models/types';
 import { FileUtils } from '../utils/FileUtils';
 import { TagMappingService } from '../services/TagMappingService';
 import { FileMovementService } from '../services/FileMovementService';
@@ -33,7 +33,7 @@ export class MoveByTagModal extends Modal {
     
     this.logger(`Found ${files.length} markdown files total`);
     
-    const result = await this.fileMovementService.moveFiles(files);
+    const result = await this.fileMovementService.moveFiles(MoveScope.ALL_FOLDERS);
     
     if (result.total === 0) {
       this.close();

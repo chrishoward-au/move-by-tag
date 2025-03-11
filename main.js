@@ -27,15 +27,15 @@ __export(main_exports, {
   default: () => MoveByTag
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian5 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/models/types.ts
 var DEFAULT_SETTINGS = {
   tagMappings: [],
-  confirmBeforeMove: true,
   excludedFolders: [],
   limitedFolders: [],
-  enableLogging: true
+  confirmBeforeMove: true,
+  enableLogging: false
 };
 
 // src/ui/MoveByTagSettingTab.ts
@@ -427,7 +427,7 @@ var FileUtils = class {
   }
 };
 
-// src/ui/MoveByTagModal.ts
+// src/ui/InfoDialog.ts
 var import_obsidian3 = require("obsidian");
 
 // src/services/FileMovementService.ts
@@ -441,141 +441,122 @@ var FileMovementService = class {
     this.logger = logger;
   }
   /**
-   * Move a single file based on its tags
+   * Move files based on their tags
+   * @param scope The scope of files to process (single file, current folder, all folders)
+   * @param contextFile The file to use as context (for single file or current folder scope)
+   * @returns Result of the operation
    */
-  async moveFile(file) {
-    try {
+  async moveFiles(scope = "all_folders" /* ALL_FOLDERS */, contextFile) {
+    this.logger(`Starting file movement process with scope: ${scope}`);
+    const filesToProcess = await this.getFilesToProcess(scope, contextFile);
+    if (filesToProcess.length === 0) {
+      this.logger("No files to process");
+      new import_obsidian2.Notice("No files to process");
+      return { total: 0, moved: 0 };
+    }
+    this.logger(`Found ${filesToProcess.length} files to process`);
+    const movements = [];
+    for (const file of filesToProcess) {
       this.logger(`Processing file: ${file.path}`);
-      if (this.fileUtils.isInExcludedFolder(file.path, this.settings.excludedFolders)) {
+      if (scope === "all_folders" /* ALL_FOLDERS */ && this.fileUtils.isInExcludedFolder(file.path, this.settings.excludedFolders)) {
         this.logger(`Skipping excluded file: ${file.path}`);
-        return false;
+        continue;
       }
       const tags = await this.fileUtils.extractTagsFromFile(file);
       this.logger(`Found tags in ${file.path}: ${tags.join(", ") || "none"}`);
-      if (tags.length === 0) {
+      if (tags.length > 0) {
+        const matches = this.tagMappingService.getTargetFolderForTags(tags, this.settings.tagMappings);
+        if (matches.length > 0) {
+          let targetFolder = matches[0].mapping.folder;
+          if (matches.length > 1) {
+            this.logger(`Found multiple matching folders for ${file.path}: ${matches.map((m) => m.mapping.folder).join(", ")}`);
+            targetFolder = await this.showRuleConflictDialog(file, matches);
+            if (!targetFolder) {
+              this.logger(`User skipped file ${file.path} due to rule conflict`);
+              new import_obsidian2.Notice(`Skipped ${file.name} due to rule conflict`);
+              continue;
+            }
+          }
+          this.logger(`Selected target folder: ${targetFolder}`);
+          const targetPath = `${targetFolder}/${file.name}`;
+          if (await this.app.vault.adapter.exists(targetPath)) {
+            this.logger(`File already exists at target location: ${targetPath}`);
+            new import_obsidian2.Notice(`Skipping ${file.name}: File already exists in target location`);
+            continue;
+          }
+          this.logger(`Planning to move ${file.path} to ${targetPath}`);
+          movements.push({ file, targetPath });
+        } else {
+          this.logger(`No matching folder found for tags: ${tags.join(", ")}`);
+        }
+      } else {
         this.logger(`No tags found in file: ${file.path}`);
-        new import_obsidian2.Notice(`No tags found in file: ${file.name}`);
-        return false;
       }
-      const matches = this.tagMappingService.getTargetFolderForTags(tags, this.settings.tagMappings);
-      if (matches.length === 0) {
-        this.logger(`No matching folder found for tags: ${tags.join(", ")}`);
-        new import_obsidian2.Notice(`No matching folder found for tags: ${tags.join(", ")}`);
-        return false;
+    }
+    if (movements.length === 0) {
+      this.logger("No files to move - no valid tag mappings found");
+      new import_obsidian2.Notice("No files to move");
+      return { total: 0, moved: 0 };
+    }
+    this.logger(`Found ${movements.length} files to move`);
+    if (this.settings.confirmBeforeMove) {
+      const confirmed = await this.showBatchConfirmationDialog(movements);
+      if (!confirmed) {
+        new import_obsidian2.Notice("Operation cancelled");
+        return { total: movements.length, moved: 0 };
       }
-      let targetFolder = matches[0].mapping.folder;
-      if (matches.length > 1) {
-        this.logger(`Found multiple matching folders for ${file.path}: ${matches.map((m) => m.mapping.folder).join(", ")}`);
-        targetFolder = await this.showRuleConflictDialog(file, matches);
-        if (!targetFolder) {
-          this.logger(`User skipped file ${file.path} due to rule conflict`);
-          new import_obsidian2.Notice(`Skipped ${file.name} due to rule conflict`);
-          return false;
-        }
-      }
-      this.logger(`Selected target folder: ${targetFolder}`);
-      const targetPath = `${targetFolder}/${file.name}`;
-      if (await this.app.vault.adapter.exists(targetPath)) {
-        this.logger(`File already exists at target location: ${targetPath}`);
-        new import_obsidian2.Notice(`Skipping ${file.name}: File already exists in target location`);
-        return false;
-      }
-      if (this.settings.confirmBeforeMove) {
-        const confirmed = await this.showConfirmationDialog(file, targetPath);
-        if (!confirmed) {
-          new import_obsidian2.Notice("Operation cancelled");
-          return false;
-        }
-      }
+    }
+    let successCount = 0;
+    for (const { file, targetPath } of movements) {
       try {
         await this.app.vault.rename(file, targetPath);
+        successCount++;
         this.logger(`Moved ${file.path} to ${targetPath}`);
-        new import_obsidian2.Notice(`Successfully moved ${file.name} to ${targetFolder}`);
-        return true;
       } catch (error) {
         new import_obsidian2.Notice(`Failed to move ${file.name}: ${error.message}`);
-        return false;
       }
-    } catch (error) {
-      new import_obsidian2.Notice(`Error processing file: ${error.message}`);
-      console.error("Move by Tag error:", error);
-      return false;
+    }
+    new import_obsidian2.Notice(`Successfully moved ${successCount} of ${movements.length} files`);
+    return { total: movements.length, moved: successCount };
+  }
+  /**
+   * Get files to process based on scope
+   */
+  async getFilesToProcess(scope, contextFile) {
+    switch (scope) {
+      case "single_file" /* SINGLE_FILE */:
+        if (!contextFile) {
+          this.logger("No context file provided for single file scope");
+          return [];
+        }
+        return [contextFile];
+      case "current_folder" /* CURRENT_FOLDER */:
+        if (!contextFile) {
+          this.logger("No context file provided for current folder scope");
+          return [];
+        }
+        const currentFolder = contextFile.path.substring(0, contextFile.path.lastIndexOf("/"));
+        this.logger(`Processing files in folder: ${currentFolder}`);
+        return this.app.vault.getMarkdownFiles().filter((file) => {
+          const fileFolder = file.path.substring(0, file.path.lastIndexOf("/"));
+          return fileFolder === currentFolder;
+        });
+      case "all_folders" /* ALL_FOLDERS */:
+      default:
+        const files = this.app.vault.getMarkdownFiles();
+        if (this.settings.limitedFolders.length > 0) {
+          return files.filter(
+            (file) => this.fileUtils.isInLimitedFolder(file.path, this.settings.limitedFolders)
+          );
+        }
+        return files;
     }
   }
   /**
-   * Move multiple files based on their tags
+   * Move a single file based on its tags
    */
-  async moveFiles(files) {
-    try {
-      this.logger("Starting file movement process...");
-      const movements = [];
-      for (const file of files) {
-        this.logger(`Processing file: ${file.path}`);
-        if (this.fileUtils.isInExcludedFolder(file.path, this.settings.excludedFolders)) {
-          this.logger(`Skipping excluded file: ${file.path}`);
-          continue;
-        }
-        const tags = await this.fileUtils.extractTagsFromFile(file);
-        this.logger(`Found tags in ${file.path}: ${tags.join(", ") || "none"}`);
-        if (tags.length > 0) {
-          const matches = this.tagMappingService.getTargetFolderForTags(tags, this.settings.tagMappings);
-          if (matches.length > 0) {
-            let targetFolder = matches[0].mapping.folder;
-            if (matches.length > 1) {
-              this.logger(`Found multiple matching folders for ${file.path}: ${matches.map((m) => m.mapping.folder).join(", ")}`);
-              targetFolder = await this.showRuleConflictDialog(file, matches);
-              if (!targetFolder) {
-                this.logger(`User skipped file ${file.path} due to rule conflict`);
-                new import_obsidian2.Notice(`Skipped ${file.name} due to rule conflict`);
-                continue;
-              }
-            }
-            this.logger(`Selected target folder: ${targetFolder}`);
-            const targetPath = `${targetFolder}/${file.name}`;
-            if (await this.app.vault.adapter.exists(targetPath)) {
-              this.logger(`File already exists at target location: ${targetPath}`);
-              new import_obsidian2.Notice(`Skipping ${file.name}: File already exists in target location`);
-              continue;
-            }
-            this.logger(`Planning to move ${file.path} to ${targetPath}`);
-            movements.push({ file, targetPath });
-          } else {
-            this.logger(`No matching folder found for tags: ${tags.join(", ")}`);
-          }
-        } else {
-          this.logger(`No tags found in file: ${file.path}`);
-        }
-      }
-      if (movements.length === 0) {
-        this.logger("No files to move - no valid tag mappings found");
-        new import_obsidian2.Notice("No files to move");
-        return { success: 0, total: 0 };
-      }
-      this.logger(`Found ${movements.length} files to move`);
-      if (this.settings.confirmBeforeMove) {
-        const confirmed = await this.showBatchConfirmationDialog(movements);
-        if (!confirmed) {
-          new import_obsidian2.Notice("Operation cancelled");
-          return { success: 0, total: movements.length };
-        }
-      }
-      let successCount = 0;
-      for (const { file, targetPath } of movements) {
-        try {
-          await this.app.vault.rename(file, targetPath);
-          successCount++;
-          this.logger(`Moved ${file.path} to ${targetPath}`);
-        } catch (error) {
-          new import_obsidian2.Notice(`Failed to move ${file.name}: ${error.message}`);
-        }
-      }
-      new import_obsidian2.Notice(`Successfully moved ${successCount} of ${movements.length} files`);
-      return { success: successCount, total: movements.length };
-    } catch (error) {
-      new import_obsidian2.Notice(`Error during file movement: ${error.message}`);
-      console.error("Move by Tag error:", error);
-      return { success: 0, total: 0 };
-    }
+  async moveFile(file) {
+    return this.moveFiles("single_file" /* SINGLE_FILE */, file);
   }
   /**
    * Show confirmation dialog for a single file move
@@ -770,37 +751,8 @@ var FileMovementService = class {
   }
 };
 
-// src/ui/MoveByTagModal.ts
-var MoveByTagModal = class extends import_obsidian3.Modal {
-  constructor(app, settings, logger) {
-    super(app);
-    this.settings = settings;
-    this.fileUtils = new FileUtils(app);
-    this.tagMappingService = new TagMappingService();
-    this.fileMovementService = new FileMovementService(
-      app,
-      settings,
-      this.fileUtils,
-      this.tagMappingService,
-      logger
-    );
-    this.logger = logger;
-  }
-  async moveFilesByTag() {
-    const files = this.app.vault.getMarkdownFiles().filter((file) => {
-      return this.fileUtils.isInLimitedFolder(file.path, this.settings.limitedFolders);
-    });
-    this.logger(`Found ${files.length} markdown files total`);
-    const result = await this.fileMovementService.moveFiles(files);
-    if (result.total === 0) {
-      this.close();
-    }
-  }
-};
-
 // src/ui/InfoDialog.ts
-var import_obsidian4 = require("obsidian");
-var InfoDialog = class extends import_obsidian4.Modal {
+var InfoDialog = class extends import_obsidian3.Modal {
   constructor(app, content, file, settings, logger) {
     super(app);
     this.fileMovementService = null;
@@ -998,6 +950,7 @@ var CommandManager = class {
   registerCommands() {
     this.registerMoveByTagCommand();
     this.registerShowFileInfoCommand();
+    this.registerMoveInCurrentFolderCommand();
   }
   /**
    * Register the Move by Tag command
@@ -1005,10 +958,42 @@ var CommandManager = class {
   registerMoveByTagCommand() {
     this.plugin.addCommand({
       id: "move-by-tag",
-      name: "Move by Tag",
+      name: "Move by Tag (All Folders)",
       callback: async () => {
-        const processor = new MoveByTagModal(this.app, this.settings, this.logger);
-        await processor.moveFilesByTag();
+        const fileMovementService = new FileMovementService(
+          this.app,
+          this.settings,
+          this.fileUtils,
+          new TagMappingService(),
+          this.logger
+        );
+        await fileMovementService.moveFiles("all_folders" /* ALL_FOLDERS */);
+      }
+    });
+  }
+  /**
+   * Register the Move in Current Folder command
+   */
+  registerMoveInCurrentFolderCommand() {
+    this.plugin.addCommand({
+      id: "move-in-current-folder",
+      name: "Move by Tag (Current Folder)",
+      checkCallback: (checking) => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (activeFile) {
+          if (!checking) {
+            const fileMovementService = new FileMovementService(
+              this.app,
+              this.settings,
+              this.fileUtils,
+              new TagMappingService(),
+              this.logger
+            );
+            fileMovementService.moveFiles("current_folder" /* CURRENT_FOLDER */, activeFile);
+          }
+          return true;
+        }
+        return false;
       }
     });
   }
@@ -1074,7 +1059,7 @@ Tags: ${tags.map((t) => "#" + t).join(", ") || "None"}
 };
 
 // src/main.ts
-var MoveByTag = class extends import_obsidian5.Plugin {
+var MoveByTag = class extends import_obsidian4.Plugin {
   log(message) {
     if (this.settings.enableLogging) {
       console.log(`[Move by Tag] ${message}`);

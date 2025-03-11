@@ -1,33 +1,39 @@
 import { TFile } from 'obsidian';
 
 export interface TagMapping {
+  id: string;
   tags: string[];
   folder: string;
-  id: string; // Unique identifier for the mapping
 }
 
 export interface MoveByTagSettings {
   tagMappings: TagMapping[];
-  confirmBeforeMove: boolean;
   excludedFolders: string[];
   limitedFolders: string[];
+  confirmBeforeMove: boolean;
   enableLogging: boolean;
 }
 
 export const DEFAULT_SETTINGS: MoveByTagSettings = {
   tagMappings: [],
-  confirmBeforeMove: true,
   excludedFolders: [],
   limitedFolders: [],
-  enableLogging: true
+  confirmBeforeMove: true,
+  enableLogging: false
 };
 
 export interface FileMovement {
-  file: TFile;
+  file: any; // TFile
   targetPath: string;
 }
 
 export interface TagMappingMatch {
   mapping: TagMapping;
   matchedTags: string[];
+}
+
+export enum MoveScope {
+  SINGLE_FILE = 'single_file',
+  CURRENT_FOLDER = 'current_folder',
+  ALL_FOLDERS = 'all_folders'
 }
