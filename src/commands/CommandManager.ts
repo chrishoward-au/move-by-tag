@@ -75,14 +75,15 @@ export class CommandManager {
    */
   private async showFileInfo(file: TFile): Promise<void> {
     const content = await this.app.vault.read(file);
-    this.showFileInfoDialog(file.path, content);
+    this.showFileInfoDialog(file, content);
   }
 
   /**
    * Show file information dialog
    */
-  private showFileInfoDialog(filePath: string, content: string): void {
-    const fileName = filePath.split('/').pop();
+  private showFileInfoDialog(file: TFile, content: string): void {
+    const fileName = file.name;
+    const filePath = file.path;
     const tags = this.fileUtils.extractTags(content);
     
     let infoText = `File: ${fileName}\nPath: ${filePath}\n\nTags: ${tags.map(t => '#' + t).join(', ') || 'None'}\n\n`;
@@ -110,6 +111,6 @@ export class CommandManager {
       }
     }
     
-    new InfoDialog(this.app, infoText).open();
+    new InfoDialog(this.app, infoText, file, this.settings, this.logger).open();
   }
 } 

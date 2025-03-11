@@ -1,11 +1,31 @@
-import { App, Modal } from 'obsidian';
+import { App, Modal, TFile } from 'obsidian';
+import { FileMovementService } from '../services/FileMovementService';
+import { FileUtils } from '../utils/FileUtils';
+import { MoveByTagSettings } from '../models/types';
+import { TagMappingService } from '../services/TagMappingService';
 
 export class InfoDialog extends Modal {
   private content: string;
+  private file: TFile | null;
+  private fileMovementService: FileMovementService | null = null;
 
-  constructor(app: App, content: string) {
+  constructor(app: App, content: string, file?: TFile, settings?: MoveByTagSettings, logger?: (message: string) => void) {
     super(app);
     this.content = content;
+    this.file = file || null;
+    
+    // Initialize FileMovementService if all dependencies are provided
+    if (file && settings && logger) {
+      const fileUtils = new FileUtils(app);
+      const tagMappingService = new TagMappingService();
+      this.fileMovementService = new FileMovementService(
+        app,
+        settings,
+        fileUtils,
+        tagMappingService,
+        logger
+      );
+    }
   }
 
   onOpen() {
@@ -140,6 +160,36 @@ export class InfoDialog extends Modal {
         }).style.color = 'var(--text-muted)';
       }
     }
+    
+    // Add buttons at the bottom
+    const buttonContainer = container.createDiv({ cls: 'file-info-buttons' });
+    buttonContainer.style.display = 'flex';
+    buttonContainer.style.justifyContent = 'flex-end';
+    buttonContainer.style.marginTop = '20px';
+    
+    // Close button
+    const closeButton = buttonContainer.createEl('button', {
+      text: 'Close',
+      cls: 'mod-warning'
+    });
+    
+    // Move button (only if file and FileMovementService are available)
+    if (this.file && this.fileMovementService && sections.foldersList && sections.foldersList.length > 0) {
+      const moveButton = buttonContainer.createEl('button', {
+        text: 'Move File',
+        cls: 'mod-cta'
+      });
+      moveButton.style.marginLeft = '10px';
+      
+      moveButton.addEventListener('click', async () => {
+        this.close();
+        await this.fileMovementService?.moveFile(this.file!);
+      });
+    }
+    
+    closeButton.addEventListener('click', () => {
+      this.close();
+    });
   }
 
   onClose() {
