@@ -511,14 +511,14 @@ var LoggingService = class {
     mdContent += `Generated: ${this.getTimestamp()}
 
 `;
-    mdContent += `| Timestamp | File Name | Source Path | Destination Path | Tags | Status | Reason |
+    mdContent += `| File Name | Source Path | Destination Path | Tags | Status | Reason |
 `;
-    mdContent += `| --------- | --------- | ----------- | ---------------- | ---- | ------ | ------ |
+    mdContent += `| --------- | ----------- | ---------------- | ---- | ------ | ------ |
 `;
     for (const entry of entries) {
       const status = entry.wasSkipped ? "\u274C" : "\u2705";
       const reason = entry.skipReason || (entry.hadRuleConflict ? "Rule conflict resolved" : "");
-      mdContent += `| ${entry.timestamp} | ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${this.escapeMarkdownField(entry.tags.join(", "))} | ${status} | ${reason} |
+      mdContent += `| ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${this.escapeMarkdownField(entry.tags.join(", "))} | ${status} | ${reason} |
 `;
     }
     const movedCount = entries.filter((e) => !e.wasSkipped).length;

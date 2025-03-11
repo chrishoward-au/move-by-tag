@@ -150,15 +150,15 @@ export class LoggingService {
     mdContent += `Generated: ${this.getTimestamp()}\n\n`;
     
     // Create table header
-    mdContent += `| Timestamp | File Name | Source Path | Destination Path | Tags | Status | Reason |\n`;
-    mdContent += `| --------- | --------- | ----------- | ---------------- | ---- | ------ | ------ |\n`;
+    mdContent += `| File Name | Source Path | Destination Path | Tags | Status | Reason |\n`;
+    mdContent += `| --------- | ----------- | ---------------- | ---- | ------ | ------ |\n`;
     
     // Add entries
     for (const entry of entries) {
       const status = entry.wasSkipped ? '❌' : '✅';
       const reason = entry.skipReason || (entry.hadRuleConflict ? 'Rule conflict resolved' : '');
       
-      mdContent += `| ${entry.timestamp} | ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${this.escapeMarkdownField(entry.tags.join(', '))} | ${status} | ${reason} |\n`;
+      mdContent += `| ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${this.escapeMarkdownField(entry.tags.join(', '))} | ${status} | ${reason} |\n`;
     }
     
     // Add summary
