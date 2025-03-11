@@ -155,7 +155,7 @@ export class LoggingService {
     
     // Add entries
     for (const entry of entries) {
-      const status = entry.wasSkipped ? '❌ Skipped' : '✅ Moved';
+      const status = entry.wasSkipped ? '❌' : '✅';
       const reason = entry.skipReason || (entry.hadRuleConflict ? 'Rule conflict resolved' : '');
       
       mdContent += `| ${entry.timestamp} | ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${this.escapeMarkdownField(entry.tags.join(', '))} | ${status} | ${reason} |\n`;
