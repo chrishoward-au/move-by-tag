@@ -108,6 +108,25 @@ export class FileMovementService {
           this.logger(`Selected target folder: ${targetFolder}`);
           const targetPath = `${targetFolder}/${file.name}`;
 
+          // Check if the file is already in the correct folder
+          const currentFolder = file.path.substring(0, file.path.lastIndexOf('/'));
+          if (currentFolder === targetFolder) {
+            this.logger(`File is already in the correct folder: ${targetFolder}`);
+            new Notice(`Skipping ${file.name}: Already in correct folder`);
+            
+            // Log skipped file that's already in the right place
+            logEntries.push(this.loggingService.createLogEntry(
+              file,
+              targetPath,
+              tags,
+              hadRuleConflict,
+              true,
+              SkipReason.ALREADY_IN_PLACE
+            ));
+            
+            continue;
+          }
+
           // Check if file already exists in target
           if (await this.app.vault.adapter.exists(targetPath)) {
             this.logger(`File already exists at target location: ${targetPath}`);

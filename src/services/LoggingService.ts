@@ -19,6 +19,7 @@ export enum SkipReason {
   NO_MATCHING_RULES = 'No matching rules',
   RULE_CONFLICT = 'Rule conflict',
   FILE_EXISTS = 'File exists at destination',
+  ALREADY_IN_PLACE = 'Already in correct folder',
   OPERATION_CANCELLED = 'Operation cancelled',
   ERROR = 'Error during move'
 }

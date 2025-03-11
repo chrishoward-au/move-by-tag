@@ -625,6 +625,20 @@ var FileMovementService = class {
           }
           this.logger(`Selected target folder: ${targetFolder}`);
           const targetPath = `${targetFolder}/${file.name}`;
+          const currentFolder = file.path.substring(0, file.path.lastIndexOf("/"));
+          if (currentFolder === targetFolder) {
+            this.logger(`File is already in the correct folder: ${targetFolder}`);
+            new import_obsidian2.Notice(`Skipping ${file.name}: Already in correct folder`);
+            logEntries.push(this.loggingService.createLogEntry(
+              file,
+              targetPath,
+              tags,
+              hadRuleConflict,
+              true,
+              "Already in correct folder" /* ALREADY_IN_PLACE */
+            ));
+            continue;
+          }
           if (await this.app.vault.adapter.exists(targetPath)) {
             this.logger(`File already exists at target location: ${targetPath}`);
             new import_obsidian2.Notice(`Skipping ${file.name}: File already exists in target location`);
