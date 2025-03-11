@@ -626,7 +626,9 @@ var FileMovementService = class {
           this.logger(`Selected target folder: ${targetFolder}`);
           const targetPath = `${targetFolder}/${file.name}`;
           const currentFolder = file.path.substring(0, file.path.lastIndexOf("/"));
-          if (currentFolder === targetFolder) {
+          const normalizedCurrentFolder = currentFolder.replace(/\/+/g, "/").replace(/\/$/, "");
+          const normalizedTargetFolder = targetFolder.replace(/\/+/g, "/").replace(/\/$/, "");
+          if (normalizedCurrentFolder === normalizedTargetFolder) {
             this.logger(`File is already in the correct folder: ${targetFolder}`);
             new import_obsidian2.Notice(`Skipping ${file.name}: Already in correct folder`);
             logEntries.push(this.loggingService.createLogEntry(
@@ -640,17 +642,20 @@ var FileMovementService = class {
             continue;
           }
           if (await this.app.vault.adapter.exists(targetPath)) {
-            this.logger(`File already exists at target location: ${targetPath}`);
-            new import_obsidian2.Notice(`Skipping ${file.name}: File already exists in target location`);
-            logEntries.push(this.loggingService.createLogEntry(
-              file,
-              targetPath,
-              tags,
-              hadRuleConflict,
-              true,
-              "File exists at destination" /* FILE_EXISTS */
-            ));
-            continue;
+            const existingFile = this.app.vault.getAbstractFileByPath(targetPath);
+            if (existingFile && existingFile !== file) {
+              this.logger(`File already exists at target location: ${targetPath}`);
+              new import_obsidian2.Notice(`Skipping ${file.name}: File already exists in target location`);
+              logEntries.push(this.loggingService.createLogEntry(
+                file,
+                targetPath,
+                tags,
+                hadRuleConflict,
+                true,
+                "File exists at destination" /* FILE_EXISTS */
+              ));
+              continue;
+            }
           }
           this.logger(`Planning to move ${file.path} to ${targetPath}`);
           movements.push({ file, targetPath });

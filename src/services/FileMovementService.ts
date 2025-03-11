@@ -108,9 +108,12 @@ export class FileMovementService {
           this.logger(`Selected target folder: ${targetFolder}`);
           const targetPath = `${targetFolder}/${file.name}`;
 
-          // Check if the file is already in the correct folder
+          // Check if the file is already in the correct folder - compare normalized paths
           const currentFolder = file.path.substring(0, file.path.lastIndexOf('/'));
-          if (currentFolder === targetFolder) {
+          const normalizedCurrentFolder = currentFolder.replace(/\/+/g, '/').replace(/\/$/, '');
+          const normalizedTargetFolder = targetFolder.replace(/\/+/g, '/').replace(/\/$/, '');
+          
+          if (normalizedCurrentFolder === normalizedTargetFolder) {
             this.logger(`File is already in the correct folder: ${targetFolder}`);
             new Notice(`Skipping ${file.name}: Already in correct folder`);
             
@@ -127,22 +130,26 @@ export class FileMovementService {
             continue;
           }
 
-          // Check if file already exists in target
+          // Check if file already exists in target with a different name
           if (await this.app.vault.adapter.exists(targetPath)) {
-            this.logger(`File already exists at target location: ${targetPath}`);
-            new Notice(`Skipping ${file.name}: File already exists in target location`);
-            
-            // Log skipped file due to existing file
-            logEntries.push(this.loggingService.createLogEntry(
-              file,
-              targetPath,
-              tags,
-              hadRuleConflict,
-              true,
-              SkipReason.FILE_EXISTS
-            ));
-            
-            continue;
+            // Double-check it's not the same file (which would be caught by the previous check)
+            const existingFile = this.app.vault.getAbstractFileByPath(targetPath);
+            if (existingFile && existingFile !== file) {
+              this.logger(`File already exists at target location: ${targetPath}`);
+              new Notice(`Skipping ${file.name}: File already exists in target location`);
+              
+              // Log skipped file due to existing file
+              logEntries.push(this.loggingService.createLogEntry(
+                file,
+                targetPath,
+                tags,
+                hadRuleConflict,
+                true,
+                SkipReason.FILE_EXISTS
+              ));
+              
+              continue;
+            }
           }
 
           this.logger(`Planning to move ${file.path} to ${targetPath}`);
