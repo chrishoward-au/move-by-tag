@@ -69,6 +69,7 @@ export class FolderSuggestions {
       suggestionItem.style.padding = '8px 12px';
       suggestionItem.style.cursor = 'pointer';
       suggestionItem.style.transition = 'background-color 0.1s ease';
+      suggestionItem.style.textAlign = 'left';
 
       // Hover effect
       suggestionItem.addEventListener('mouseover', () => {

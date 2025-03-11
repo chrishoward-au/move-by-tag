@@ -38,8 +38,341 @@ var DEFAULT_SETTINGS = {
   enableLogging: true
 };
 
-// src/ui/MoveByTagModal.ts
+// src/ui/MoveByTagSettingTab.ts
 var import_obsidian = require("obsidian");
+
+// src/ui/FolderSuggestions.ts
+var FolderSuggestions = class {
+  constructor(app) {
+    this.app = app;
+  }
+  /**
+   * Search for folders matching a query
+   */
+  async searchFolders(query) {
+    if (!query)
+      return [];
+    const folders = this.app.vault.getAllFolders();
+    let folderPaths = folders.map((folder) => {
+      return folder.path === "/" ? "/" : folder.path.startsWith("/") ? folder.path : "/" + folder.path;
+    });
+    folderPaths = folderPaths.filter((path) => path.toLowerCase().includes(query.toLowerCase())).sort();
+    return folderPaths;
+  }
+  /**
+   * Display folder suggestions dropdown
+   */
+  displayFolderSuggestions(folders) {
+    const existingSuggestions = document.querySelectorAll(".folder-suggestions-container");
+    existingSuggestions.forEach((el) => el.remove());
+    if (folders.length === 0)
+      return;
+    const activeElement = document.activeElement;
+    if (!(activeElement instanceof HTMLInputElement)) {
+      return;
+    }
+    const settingItemControl = activeElement.closest(".setting-item-control");
+    if (!settingItemControl) {
+      return;
+    }
+    settingItemControl.style.position = "relative";
+    console.log("Setting up suggestions container with parent:", settingItemControl);
+    const newContainer = document.createElement("div");
+    newContainer.className = "folder-suggestions-container";
+    newContainer.style.position = "absolute";
+    newContainer.style.backgroundColor = "var(--background-primary)";
+    newContainer.style.border = "1px solid var(--background-modifier-border)";
+    newContainer.style.borderRadius = "4px";
+    newContainer.style.zIndex = "1000";
+    newContainer.style.boxShadow = "0 2px 8px var(--background-modifier-box-shadow)";
+    folders.forEach((folder) => {
+      const suggestionItem = document.createElement("div");
+      suggestionItem.className = "folder-suggestion-item";
+      suggestionItem.textContent = folder;
+      suggestionItem.style.padding = "8px 12px";
+      suggestionItem.style.cursor = "pointer";
+      suggestionItem.style.transition = "background-color 0.1s ease";
+      suggestionItem.style.textAlign = "left";
+      suggestionItem.addEventListener("mouseover", () => {
+        suggestionItem.style.backgroundColor = "var(--background-modifier-hover)";
+      });
+      suggestionItem.addEventListener("mouseout", () => {
+        suggestionItem.style.backgroundColor = "";
+      });
+      suggestionItem.addEventListener("click", () => {
+        activeElement.value = folder;
+        const event = new Event("input", { bubbles: true });
+        activeElement.dispatchEvent(event);
+        newContainer.remove();
+      });
+      newContainer.appendChild(suggestionItem);
+    });
+    const rect = activeElement.getBoundingClientRect();
+    const controlRect = settingItemControl.getBoundingClientRect();
+    settingItemControl.appendChild(newContainer);
+    newContainer.style.position = "absolute";
+    newContainer.style.left = "";
+    newContainer.style.right = "0";
+    newContainer.style.top = `${rect.height + 4}px`;
+    newContainer.style.width = `${rect.width}px`;
+    newContainer.style.maxHeight = "200px";
+    newContainer.style.overflowY = "auto";
+    newContainer.style.overflowX = "hidden";
+    newContainer.offsetHeight;
+    console.log("Container styles after positioning:", {
+      position: newContainer.style.position,
+      right: newContainer.style.right,
+      left: newContainer.style.left,
+      top: newContainer.style.top,
+      width: newContainer.style.width
+    });
+    const clickOutsideHandler = (e) => {
+      if (!newContainer.contains(e.target) && e.target !== activeElement) {
+        newContainer.remove();
+        document.removeEventListener("click", clickOutsideHandler);
+      }
+    };
+    setTimeout(() => {
+      document.addEventListener("click", clickOutsideHandler);
+    }, 0);
+  }
+};
+
+// src/services/TagMappingService.ts
+var TagMappingService = class {
+  /**
+   * Generate a unique ID for a tag mapping
+   */
+  generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+  }
+  /**
+   * Find matching folders for a set of tags
+   */
+  getTargetFolderForTags(fileTags, tagMappings) {
+    if (tagMappings.length === 0) {
+      return [];
+    }
+    const lowerFileTags = fileTags.map((tag) => tag.toLowerCase());
+    const matches = [];
+    for (const mapping of tagMappings) {
+      const lowerMappingTags = mapping.tags.map((tag) => tag.toLowerCase());
+      const matchedTags = [];
+      for (const mappingTag of mapping.tags) {
+        const lowerMappingTag = mappingTag.toLowerCase();
+        const matchingFileTag = lowerFileTags.find(
+          (fileTag) => fileTag === lowerMappingTag || fileTag === lowerMappingTag + "s" || fileTag.slice(0, -1) === lowerMappingTag
+        );
+        if (matchingFileTag) {
+          matchedTags.push(mappingTag);
+        }
+      }
+      if (matchedTags.length === mapping.tags.length) {
+        matches.push({ mapping, matchedTags });
+      }
+    }
+    return matches;
+  }
+};
+
+// src/ui/MoveByTagSettingTab.ts
+var MoveByTagSettingTab = class extends import_obsidian.PluginSettingTab {
+  constructor(app, plugin, settings, saveSettings) {
+    super(app, plugin);
+    this.plugin = plugin;
+    this.settings = settings;
+    this.saveSettings = saveSettings;
+    this.folderSuggestions = new FolderSuggestions(app);
+    this.tagMappingService = new TagMappingService();
+  }
+  createFolderInputSetting(parentEl, placeholder, label) {
+    let textComponent = null;
+    console.log("Creating folder input setting for:", label);
+    new import_obsidian.Setting(parentEl).setName(label).addText((text) => {
+      text.setPlaceholder(placeholder);
+      text.inputEl.style.width = "300px";
+      text.inputEl.setAttribute("data-folder-input", label);
+      text.onChange(async (value) => {
+        console.log("Input changed:", value);
+        const inputEl = text.inputEl;
+        const results = await this.folderSuggestions.searchFolders(value);
+        if (document.activeElement === inputEl) {
+          this.folderSuggestions.displayFolderSuggestions(results);
+        }
+      });
+      textComponent = text;
+    });
+    if (!textComponent)
+      throw new Error("Failed to create text component");
+    return textComponent;
+  }
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+    containerEl.createEl("h3", { text: "General Settings" });
+    new import_obsidian.Setting(containerEl).setName("Confirm Before Moving").setDesc("Show confirmation dialog before moving files").addToggle((toggle) => toggle.setValue(this.settings.confirmBeforeMove).onChange(async (value) => {
+      this.settings.confirmBeforeMove = value;
+      await this.saveSettings();
+    }));
+    new import_obsidian.Setting(containerEl).setName("Enable Logging").setDesc("Log file movements to console").addToggle((toggle) => toggle.setValue(this.settings.enableLogging).onChange(async (value) => {
+      this.settings.enableLogging = value;
+      await this.saveSettings();
+    }));
+    containerEl.createEl("h3", { text: "Excluded Folders" });
+    containerEl.createEl("p", {
+      text: "Files in these folders will not be moved. One folder path per line.",
+      cls: "setting-item-description"
+    });
+    this.createFolderInputSetting(containerEl, "Exclude folder/subfolder", "Exclude folder");
+    containerEl.createEl("h3", { text: "Specific Folders" });
+    containerEl.createEl("p", {
+      text: "Files will only be moved from these folders. One folder path per line.",
+      cls: "setting-item-description"
+    });
+    this.createFolderInputSetting(containerEl, "Specific folder/subfolder", "Specific folder");
+    containerEl.createEl("h3", { text: "Tag Mappings" });
+    containerEl.createEl("p", {
+      text: "Define where files should be moved based on their tags.",
+      cls: "setting-item-description"
+    });
+    new import_obsidian.Setting(containerEl).addButton((button) => button.setButtonText("Add New Mapping").setCta().onClick(() => this.showNewMappingModal()));
+    const mappingsContainer = containerEl.createDiv("tag-mappings-container");
+    if (this.settings.tagMappings.length === 0) {
+      mappingsContainer.createEl("p", {
+        text: 'No tag mappings defined yet. Click "Add New Mapping" to create one.',
+        cls: "setting-item-description"
+      });
+    }
+    const sortedMappings = [...this.settings.tagMappings].sort((a, b) => a.tags[0].localeCompare(b.tags[0]));
+    for (const mapping of sortedMappings) {
+      const tagDisplay = mapping.tags.map((t) => "#" + t).join(" + ");
+      new import_obsidian.Setting(mappingsContainer).setName(tagDisplay).setDesc(`Current destination: ${mapping.folder}`).addButton((button) => button.setButtonText("Edit").onClick(() => {
+        this.showEditMappingModal(mapping);
+      }));
+    }
+  }
+  async showNewMappingModal() {
+    const modal = new import_obsidian.Modal(this.app);
+    modal.titleEl.setText("Create New Tag Mapping");
+    const contentEl = modal.contentEl;
+    let tagsInput;
+    new import_obsidian.Setting(contentEl).setName("Tags").setDesc("Enter tags without # symbol, separated by commas. All tags must be present for the rule to apply.").addText((text) => {
+      tagsInput = text;
+      text.setPlaceholder("tag1, tag2, tag3");
+    });
+    this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder");
+    new import_obsidian.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => modal.close())).addButton((button) => button.setButtonText("Add").setCta().onClick(async () => {
+      const tagsValue = tagsInput.getValue().trim();
+      const folder = this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder").getValue().trim();
+      if (!tagsValue || !folder) {
+        new import_obsidian.Notice("Both tags and folder are required");
+        return;
+      }
+      const tags = tagsValue.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+      if (tags.length === 0) {
+        new import_obsidian.Notice("At least one tag is required");
+        return;
+      }
+      const tagSet = new Set(tags.map((t) => t.toLowerCase()));
+      if (this.settings.tagMappings.some(
+        (m) => m.tags.length === tags.length && m.tags.every((t) => tagSet.has(t.toLowerCase()))
+      )) {
+        new import_obsidian.Notice("This tag combination already has a mapping");
+        return;
+      }
+      const newMapping = {
+        id: this.tagMappingService.generateId(),
+        tags,
+        folder
+      };
+      this.settings.tagMappings.push(newMapping);
+      await this.saveSettings();
+      this.display();
+      modal.close();
+    }));
+    modal.onClose = () => {
+      const suggestionsContainer = document.getElementById("folder-suggestions");
+      if (suggestionsContainer) {
+        suggestionsContainer.remove();
+      }
+    };
+    modal.open();
+  }
+  async showEditMappingModal(mapping) {
+    const modal = new import_obsidian.Modal(this.app);
+    modal.titleEl.setText("Edit Tag Mapping");
+    const contentEl = modal.contentEl;
+    let tagsInput;
+    new import_obsidian.Setting(contentEl).setName("Tags").setDesc("Enter tags without # symbol, separated by commas. All tags must be present for the rule to apply.").addText((text) => {
+      tagsInput = text;
+      text.setValue(mapping.tags.join(", "));
+    });
+    this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder").setValue(mapping.folder);
+    new import_obsidian.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => modal.close())).addButton((button) => button.setButtonText("Delete").setWarning().onClick(async () => {
+      if (await this.showDeleteConfirmation(mapping)) {
+        this.settings.tagMappings = this.settings.tagMappings.filter((m) => m.id !== mapping.id);
+        await this.saveSettings();
+        this.display();
+        modal.close();
+      }
+    })).addButton((button) => button.setButtonText("Save").setCta().onClick(async () => {
+      const tagsValue = tagsInput.getValue().trim();
+      const folder = this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder").getValue().trim();
+      if (!tagsValue || !folder) {
+        new import_obsidian.Notice("Both tags and folder are required");
+        return;
+      }
+      const tags = tagsValue.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+      if (tags.length === 0) {
+        new import_obsidian.Notice("At least one tag is required");
+        return;
+      }
+      const tagSet = new Set(tags.map((t) => t.toLowerCase()));
+      if (this.settings.tagMappings.some(
+        (m) => m.id !== mapping.id && m.tags.length === tags.length && m.tags.every((t) => tagSet.has(t.toLowerCase()))
+      )) {
+        new import_obsidian.Notice("This tag combination already has a mapping");
+        return;
+      }
+      const index = this.settings.tagMappings.findIndex((m) => m.id === mapping.id);
+      if (index !== -1) {
+        this.settings.tagMappings[index] = {
+          ...mapping,
+          tags,
+          folder
+        };
+        await this.saveSettings();
+        this.display();
+        modal.close();
+      }
+    }));
+    modal.onClose = () => {
+      const suggestionsContainer = document.getElementById("folder-suggestions");
+      if (suggestionsContainer) {
+        suggestionsContainer.remove();
+      }
+    };
+    modal.open();
+  }
+  async showDeleteConfirmation(mapping) {
+    return new Promise((resolve) => {
+      const modal = new import_obsidian.Modal(this.app);
+      modal.titleEl.setText("Delete Mapping");
+      const contentEl = modal.contentEl;
+      contentEl.createEl("p", {
+        text: `Are you sure you want to delete the mapping for tags: ${mapping.tags.map((t) => "#" + t).join(" + ")}?`
+      });
+      new import_obsidian.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => {
+        modal.close();
+        resolve(false);
+      })).addButton((button) => button.setButtonText("Delete").setWarning().onClick(() => {
+        modal.close();
+        resolve(true);
+      }));
+      modal.open();
+    });
+  }
+};
 
 // src/utils/FileUtils.ts
 var FileUtils = class {
@@ -94,45 +427,9 @@ var FileUtils = class {
   }
 };
 
-// src/services/TagMappingService.ts
-var TagMappingService = class {
-  /**
-   * Generate a unique ID for a tag mapping
-   */
-  generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2);
-  }
-  /**
-   * Find matching folders for a set of tags
-   */
-  getTargetFolderForTags(fileTags, tagMappings) {
-    if (tagMappings.length === 0) {
-      return [];
-    }
-    const lowerFileTags = fileTags.map((tag) => tag.toLowerCase());
-    const matches = [];
-    for (const mapping of tagMappings) {
-      const lowerMappingTags = mapping.tags.map((tag) => tag.toLowerCase());
-      const matchedTags = [];
-      for (const mappingTag of mapping.tags) {
-        const lowerMappingTag = mappingTag.toLowerCase();
-        const matchingFileTag = lowerFileTags.find(
-          (fileTag) => fileTag === lowerMappingTag || fileTag === lowerMappingTag + "s" || fileTag.slice(0, -1) === lowerMappingTag
-        );
-        if (matchingFileTag) {
-          matchedTags.push(mappingTag);
-        }
-      }
-      if (matchedTags.length === mapping.tags.length) {
-        matches.push({ mapping, matchedTags });
-      }
-    }
-    return matches;
-  }
-};
-
 // src/ui/MoveByTagModal.ts
-var MoveByTagModal = class extends import_obsidian.Modal {
+var import_obsidian2 = require("obsidian");
+var MoveByTagModal = class extends import_obsidian2.Modal {
   constructor(app, settings, logger) {
     super(app);
     this.settings = settings;
@@ -142,7 +439,7 @@ var MoveByTagModal = class extends import_obsidian.Modal {
   }
   async showConfirmationDialog(movements) {
     return new Promise((resolve) => {
-      const modal = new import_obsidian.Modal(this.app);
+      const modal = new import_obsidian2.Modal(this.app);
       modal.titleEl.setText("Confirm File Movements");
       const { contentEl } = modal;
       contentEl.createEl("p", {
@@ -156,7 +453,7 @@ var MoveByTagModal = class extends import_obsidian.Modal {
         const item = fileList.createEl("div", { cls: "move-by-tag-file-item" });
         item.createEl("span", { text: `${file.path} \u2192 ${targetPath}` });
       });
-      new import_obsidian.Setting(contentEl).addButton((btn) => btn.setButtonText("Cancel").onClick(() => {
+      new import_obsidian2.Setting(contentEl).addButton((btn) => btn.setButtonText("Cancel").onClick(() => {
         modal.close();
         resolve(false);
       })).addButton((btn) => btn.setButtonText("Move Files").setCta().onClick(() => {
@@ -168,7 +465,7 @@ var MoveByTagModal = class extends import_obsidian.Modal {
   }
   async showRuleConflictDialog(file, matches) {
     return new Promise((resolve) => {
-      const modal = new import_obsidian.Modal(this.app);
+      const modal = new import_obsidian2.Modal(this.app);
       modal.titleEl.setText("Multiple Rules Match");
       const { contentEl } = modal;
       contentEl.createEl("p", {
@@ -279,7 +576,7 @@ var MoveByTagModal = class extends import_obsidian.Modal {
               targetFolder = await this.showRuleConflictDialog(file, matches);
               if (!targetFolder) {
                 this.logger(`User skipped file ${file.path} due to rule conflict`);
-                new import_obsidian.Notice(`Skipped ${file.name} due to rule conflict`);
+                new import_obsidian2.Notice(`Skipped ${file.name} due to rule conflict`);
                 continue;
               }
             }
@@ -287,7 +584,7 @@ var MoveByTagModal = class extends import_obsidian.Modal {
             const targetPath = `${targetFolder}/${file.name}`;
             if (await this.app.vault.adapter.exists(targetPath)) {
               this.logger(`File already exists at target location: ${targetPath}`);
-              new import_obsidian.Notice(`Skipping ${file.name}: File already exists in target location`);
+              new import_obsidian2.Notice(`Skipping ${file.name}: File already exists in target location`);
               continue;
             }
             this.logger(`Planning to move ${file.path} to ${targetPath}`);
@@ -301,7 +598,7 @@ var MoveByTagModal = class extends import_obsidian.Modal {
       }
       if (movements.length === 0) {
         this.logger("No files to move - no valid tag mappings found");
-        new import_obsidian.Notice("No files to move");
+        new import_obsidian2.Notice("No files to move");
         this.close();
         return;
       }
@@ -309,7 +606,7 @@ var MoveByTagModal = class extends import_obsidian.Modal {
       if (this.settings.confirmBeforeMove) {
         const confirmed = await this.showConfirmationDialog(movements);
         if (!confirmed) {
-          new import_obsidian.Notice("Operation cancelled");
+          new import_obsidian2.Notice("Operation cancelled");
           return;
         }
       }
@@ -320,314 +617,16 @@ var MoveByTagModal = class extends import_obsidian.Modal {
           successCount++;
           this.logger(`Moved ${file.path} to ${targetPath}`);
         } catch (error) {
-          new import_obsidian.Notice(`Failed to move ${file.name}: ${error.message}`);
+          new import_obsidian2.Notice(`Failed to move ${file.name}: ${error.message}`);
         }
       }
-      new import_obsidian.Notice(`Successfully moved ${successCount} of ${movements.length} files`);
+      new import_obsidian2.Notice(`Successfully moved ${successCount} of ${movements.length} files`);
       this.close();
     } catch (error) {
-      new import_obsidian.Notice(`Error during file movement: ${error.message}`);
+      new import_obsidian2.Notice(`Error during file movement: ${error.message}`);
       console.error("Move by Tag error:", error);
       this.close();
     }
-  }
-};
-
-// src/ui/MoveByTagSettingTab.ts
-var import_obsidian2 = require("obsidian");
-
-// src/ui/FolderSuggestions.ts
-var FolderSuggestions = class {
-  constructor(app) {
-    this.app = app;
-  }
-  /**
-   * Search for folders matching a query
-   */
-  async searchFolders(query) {
-    if (!query)
-      return [];
-    const folders = this.app.vault.getAllFolders();
-    let folderPaths = folders.map((folder) => {
-      return folder.path === "/" ? "/" : folder.path.startsWith("/") ? folder.path : "/" + folder.path;
-    });
-    folderPaths = folderPaths.filter((path) => path.toLowerCase().includes(query.toLowerCase())).sort();
-    return folderPaths;
-  }
-  /**
-   * Display folder suggestions dropdown
-   */
-  displayFolderSuggestions(folders) {
-    const existingSuggestions = document.querySelectorAll(".folder-suggestions-container");
-    existingSuggestions.forEach((el) => el.remove());
-    if (folders.length === 0)
-      return;
-    const activeElement = document.activeElement;
-    if (!(activeElement instanceof HTMLInputElement)) {
-      return;
-    }
-    const settingItemControl = activeElement.closest(".setting-item-control");
-    if (!settingItemControl) {
-      return;
-    }
-    settingItemControl.style.position = "relative";
-    console.log("Setting up suggestions container with parent:", settingItemControl);
-    const newContainer = document.createElement("div");
-    newContainer.className = "folder-suggestions-container";
-    newContainer.style.position = "absolute";
-    newContainer.style.backgroundColor = "var(--background-primary)";
-    newContainer.style.border = "1px solid var(--background-modifier-border)";
-    newContainer.style.borderRadius = "4px";
-    newContainer.style.zIndex = "1000";
-    newContainer.style.boxShadow = "0 2px 8px var(--background-modifier-box-shadow)";
-    folders.forEach((folder) => {
-      const suggestionItem = document.createElement("div");
-      suggestionItem.className = "folder-suggestion-item";
-      suggestionItem.textContent = folder;
-      suggestionItem.style.padding = "8px 12px";
-      suggestionItem.style.cursor = "pointer";
-      suggestionItem.style.transition = "background-color 0.1s ease";
-      suggestionItem.addEventListener("mouseover", () => {
-        suggestionItem.style.backgroundColor = "var(--background-modifier-hover)";
-      });
-      suggestionItem.addEventListener("mouseout", () => {
-        suggestionItem.style.backgroundColor = "";
-      });
-      suggestionItem.addEventListener("click", () => {
-        activeElement.value = folder;
-        const event = new Event("input", { bubbles: true });
-        activeElement.dispatchEvent(event);
-        newContainer.remove();
-      });
-      newContainer.appendChild(suggestionItem);
-    });
-    const rect = activeElement.getBoundingClientRect();
-    const controlRect = settingItemControl.getBoundingClientRect();
-    settingItemControl.appendChild(newContainer);
-    newContainer.style.position = "absolute";
-    newContainer.style.left = "";
-    newContainer.style.right = "0";
-    newContainer.style.top = `${rect.height + 4}px`;
-    newContainer.style.width = `${rect.width}px`;
-    newContainer.style.maxHeight = "200px";
-    newContainer.style.overflowY = "auto";
-    newContainer.style.overflowX = "hidden";
-    newContainer.offsetHeight;
-    console.log("Container styles after positioning:", {
-      position: newContainer.style.position,
-      right: newContainer.style.right,
-      left: newContainer.style.left,
-      top: newContainer.style.top,
-      width: newContainer.style.width
-    });
-    const clickOutsideHandler = (e) => {
-      if (!newContainer.contains(e.target) && e.target !== activeElement) {
-        newContainer.remove();
-        document.removeEventListener("click", clickOutsideHandler);
-      }
-    };
-    setTimeout(() => {
-      document.addEventListener("click", clickOutsideHandler);
-    }, 0);
-  }
-};
-
-// src/ui/MoveByTagSettingTab.ts
-var MoveByTagSettingTab = class extends import_obsidian2.PluginSettingTab {
-  constructor(app, plugin, settings, saveSettings) {
-    super(app, plugin);
-    this.plugin = plugin;
-    this.settings = settings;
-    this.saveSettings = saveSettings;
-    this.folderSuggestions = new FolderSuggestions(app);
-    this.tagMappingService = new TagMappingService();
-  }
-  createFolderInputSetting(parentEl, placeholder, label) {
-    let textComponent = null;
-    console.log("Creating folder input setting for:", label);
-    new import_obsidian2.Setting(parentEl).setName(label).addText((text) => {
-      text.setPlaceholder(placeholder);
-      text.inputEl.style.width = "300px";
-      text.inputEl.setAttribute("data-folder-input", label);
-      text.onChange(async (value) => {
-        console.log("Input changed:", value);
-        const inputEl = text.inputEl;
-        const results = await this.folderSuggestions.searchFolders(value);
-        if (document.activeElement === inputEl) {
-          this.folderSuggestions.displayFolderSuggestions(results);
-        }
-      });
-      textComponent = text;
-    });
-    if (!textComponent)
-      throw new Error("Failed to create text component");
-    return textComponent;
-  }
-  display() {
-    const { containerEl } = this;
-    containerEl.empty();
-    containerEl.createEl("h3", { text: "General Settings" });
-    new import_obsidian2.Setting(containerEl).setName("Confirm Before Moving").setDesc("Show confirmation dialog before moving files").addToggle((toggle) => toggle.setValue(this.settings.confirmBeforeMove).onChange(async (value) => {
-      this.settings.confirmBeforeMove = value;
-      await this.saveSettings();
-    }));
-    new import_obsidian2.Setting(containerEl).setName("Enable Logging").setDesc("Log file movements to console").addToggle((toggle) => toggle.setValue(this.settings.enableLogging).onChange(async (value) => {
-      this.settings.enableLogging = value;
-      await this.saveSettings();
-    }));
-    containerEl.createEl("h3", { text: "Excluded Folders" });
-    containerEl.createEl("p", {
-      text: "Files in these folders will not be moved. One folder path per line.",
-      cls: "setting-item-description"
-    });
-    this.createFolderInputSetting(containerEl, "Exclude folder/subfolder", "Exclude folder");
-    containerEl.createEl("h3", { text: "Specific Folders" });
-    containerEl.createEl("p", {
-      text: "Files will only be moved from these folders. One folder path per line.",
-      cls: "setting-item-description"
-    });
-    this.createFolderInputSetting(containerEl, "Specific folder/subfolder", "Specific folder");
-    containerEl.createEl("h3", { text: "Tag Mappings" });
-    containerEl.createEl("p", {
-      text: "Define where files should be moved based on their tags.",
-      cls: "setting-item-description"
-    });
-    new import_obsidian2.Setting(containerEl).addButton((button) => button.setButtonText("Add New Mapping").setCta().onClick(() => this.showNewMappingModal()));
-    const mappingsContainer = containerEl.createDiv("tag-mappings-container");
-    if (this.settings.tagMappings.length === 0) {
-      mappingsContainer.createEl("p", {
-        text: 'No tag mappings defined yet. Click "Add New Mapping" to create one.',
-        cls: "setting-item-description"
-      });
-    }
-    const sortedMappings = [...this.settings.tagMappings].sort((a, b) => a.tags[0].localeCompare(b.tags[0]));
-    for (const mapping of sortedMappings) {
-      const tagDisplay = mapping.tags.map((t) => "#" + t).join(" + ");
-      new import_obsidian2.Setting(mappingsContainer).setName(tagDisplay).setDesc(`Current destination: ${mapping.folder}`).addButton((button) => button.setButtonText("Edit").onClick(() => {
-        this.showEditMappingModal(mapping);
-      }));
-    }
-  }
-  async showNewMappingModal() {
-    const modal = new import_obsidian2.Modal(this.app);
-    modal.titleEl.setText("Create New Tag Mapping");
-    const contentEl = modal.contentEl;
-    let tagsInput;
-    new import_obsidian2.Setting(contentEl).setName("Tags").setDesc("Enter tags without # symbol, separated by commas. All tags must be present for the rule to apply.").addText((text) => {
-      tagsInput = text;
-      text.setPlaceholder("tag1, tag2, tag3");
-    });
-    this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder");
-    new import_obsidian2.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => modal.close())).addButton((button) => button.setButtonText("Add").setCta().onClick(async () => {
-      const tagsValue = tagsInput.getValue().trim();
-      const folder = this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder").getValue().trim();
-      if (!tagsValue || !folder) {
-        new import_obsidian2.Notice("Both tags and folder are required");
-        return;
-      }
-      const tags = tagsValue.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
-      if (tags.length === 0) {
-        new import_obsidian2.Notice("At least one tag is required");
-        return;
-      }
-      const tagSet = new Set(tags.map((t) => t.toLowerCase()));
-      if (this.settings.tagMappings.some(
-        (m) => m.tags.length === tags.length && m.tags.every((t) => tagSet.has(t.toLowerCase()))
-      )) {
-        new import_obsidian2.Notice("This tag combination already has a mapping");
-        return;
-      }
-      const newMapping = {
-        id: this.tagMappingService.generateId(),
-        tags,
-        folder
-      };
-      this.settings.tagMappings.push(newMapping);
-      await this.saveSettings();
-      this.display();
-      modal.close();
-    }));
-    modal.onClose = () => {
-      const suggestionsContainer = document.getElementById("folder-suggestions");
-      if (suggestionsContainer) {
-        suggestionsContainer.remove();
-      }
-    };
-    modal.open();
-  }
-  async showEditMappingModal(mapping) {
-    const modal = new import_obsidian2.Modal(this.app);
-    modal.titleEl.setText("Edit Tag Mapping");
-    const contentEl = modal.contentEl;
-    let tagsInput;
-    new import_obsidian2.Setting(contentEl).setName("Tags").setDesc("Enter tags without # symbol, separated by commas. All tags must be present for the rule to apply.").addText((text) => {
-      tagsInput = text;
-      text.setValue(mapping.tags.join(", "));
-    });
-    this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder").setValue(mapping.folder);
-    new import_obsidian2.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => modal.close())).addButton((button) => button.setButtonText("Delete").setWarning().onClick(async () => {
-      if (await this.showDeleteConfirmation(mapping)) {
-        this.settings.tagMappings = this.settings.tagMappings.filter((m) => m.id !== mapping.id);
-        await this.saveSettings();
-        this.display();
-        modal.close();
-      }
-    })).addButton((button) => button.setButtonText("Save").setCta().onClick(async () => {
-      const tagsValue = tagsInput.getValue().trim();
-      const folder = this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder").getValue().trim();
-      if (!tagsValue || !folder) {
-        new import_obsidian2.Notice("Both tags and folder are required");
-        return;
-      }
-      const tags = tagsValue.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
-      if (tags.length === 0) {
-        new import_obsidian2.Notice("At least one tag is required");
-        return;
-      }
-      const tagSet = new Set(tags.map((t) => t.toLowerCase()));
-      if (this.settings.tagMappings.some(
-        (m) => m.id !== mapping.id && m.tags.length === tags.length && m.tags.every((t) => tagSet.has(t.toLowerCase()))
-      )) {
-        new import_obsidian2.Notice("This tag combination already has a mapping");
-        return;
-      }
-      const index = this.settings.tagMappings.findIndex((m) => m.id === mapping.id);
-      if (index !== -1) {
-        this.settings.tagMappings[index] = {
-          ...mapping,
-          tags,
-          folder
-        };
-        await this.saveSettings();
-        this.display();
-        modal.close();
-      }
-    }));
-    modal.onClose = () => {
-      const suggestionsContainer = document.getElementById("folder-suggestions");
-      if (suggestionsContainer) {
-        suggestionsContainer.remove();
-      }
-    };
-    modal.open();
-  }
-  async showDeleteConfirmation(mapping) {
-    return new Promise((resolve) => {
-      const modal = new import_obsidian2.Modal(this.app);
-      modal.titleEl.setText("Delete Mapping");
-      const contentEl = modal.contentEl;
-      contentEl.createEl("p", {
-        text: `Are you sure you want to delete the mapping for tags: ${mapping.tags.map((t) => "#" + t).join(" + ")}?`
-      });
-      new import_obsidian2.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => {
-        modal.close();
-        resolve(false);
-      })).addButton((button) => button.setButtonText("Delete").setWarning().onClick(() => {
-        modal.close();
-        resolve(true);
-      }));
-      modal.open();
-    });
   }
 };
 
@@ -648,25 +647,40 @@ var InfoDialog = class extends import_obsidian3.Modal {
   }
 };
 
-// src/main.ts
-var MoveByTag = class extends import_obsidian4.Plugin {
-  log(message) {
-    if (this.settings.enableLogging) {
-      console.log(`[Move by Tag] ${message}`);
-    }
+// src/commands/CommandManager.ts
+var CommandManager = class {
+  constructor(plugin, app, settings, fileUtils, logger) {
+    this.plugin = plugin;
+    this.app = app;
+    this.settings = settings;
+    this.fileUtils = fileUtils;
+    this.logger = logger;
   }
-  async onload() {
-    await this.loadSettings();
-    this.fileUtils = new FileUtils(this.app);
-    this.addCommand({
+  /**
+   * Register all commands
+   */
+  registerCommands() {
+    this.registerMoveByTagCommand();
+    this.registerShowFileInfoCommand();
+  }
+  /**
+   * Register the Move by Tag command
+   */
+  registerMoveByTagCommand() {
+    this.plugin.addCommand({
       id: "move-by-tag",
       name: "Move by Tag",
       callback: async () => {
-        const processor = new MoveByTagModal(this.app, this.settings, this.log.bind(this));
+        const processor = new MoveByTagModal(this.app, this.settings, this.logger);
         await processor.moveFilesByTag();
       }
     });
-    this.addCommand({
+  }
+  /**
+   * Register the Show File Info command
+   */
+  registerShowFileInfoCommand() {
+    this.plugin.addCommand({
       id: "show-file-info",
       name: "Show File Info",
       checkCallback: (checking) => {
@@ -680,21 +694,17 @@ var MoveByTag = class extends import_obsidian4.Plugin {
         return false;
       }
     });
-    this.addSettingTab(new MoveByTagSettingTab(
-      this.app,
-      this,
-      this.settings,
-      this.saveSettings.bind(this)
-    ));
-    console.log("Move by Tag Plugin loaded");
   }
-  async onunload() {
-    console.log("Move by Tag Plugin unloaded");
-  }
+  /**
+   * Show file information
+   */
   async showFileInfo(file) {
     const content = await this.app.vault.read(file);
     this.showFileInfoDialog(file.path, content);
   }
+  /**
+   * Show file information dialog
+   */
   showFileInfoDialog(filePath, content) {
     const fileName = filePath.split("/").pop();
     const tags = this.fileUtils.extractTags(content);
@@ -723,6 +733,37 @@ Tags: ${tags.map((t) => "#" + t).join(", ") || "None"}
       }
     }
     new InfoDialog(this.app, infoText).open();
+  }
+};
+
+// src/main.ts
+var MoveByTag = class extends import_obsidian4.Plugin {
+  log(message) {
+    if (this.settings.enableLogging) {
+      console.log(`[Move by Tag] ${message}`);
+    }
+  }
+  async onload() {
+    await this.loadSettings();
+    this.fileUtils = new FileUtils(this.app);
+    this.commandManager = new CommandManager(
+      this,
+      this.app,
+      this.settings,
+      this.fileUtils,
+      this.log.bind(this)
+    );
+    this.commandManager.registerCommands();
+    this.addSettingTab(new MoveByTagSettingTab(
+      this.app,
+      this,
+      this.settings,
+      this.saveSettings.bind(this)
+    ));
+    console.log("Move by Tag Plugin loaded");
+  }
+  async onunload() {
+    console.log("Move by Tag Plugin unloaded");
   }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
