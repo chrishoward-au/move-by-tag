@@ -472,52 +472,92 @@ var LoggingService = class {
    */
   getLogFilename(operationType) {
     const timestamp = this.getTimestamp().replace(":", "").replace(":", "");
-    return `${operationType}_${timestamp}.csv`;
+    return `${operationType}_${timestamp}.md`;
   }
   /**
    * Create a log entry for a file movement
    */
-  createLogEntry(file, destinationPath, tags, hadRuleConflict, wasSkipped) {
+  createLogEntry(file, destinationPath, tags, hadRuleConflict, wasSkipped, skipReason = "" /* NONE */) {
+    const getDirectoryPath = (path) => {
+      const lastSlashIndex = path.lastIndexOf("/");
+      return lastSlashIndex >= 0 ? path.substring(0, lastSlashIndex) : "";
+    };
+    const sourceDir = getDirectoryPath(file.path);
+    let destDir = "";
+    if (destinationPath) {
+      destDir = getDirectoryPath(destinationPath);
+    }
     return {
       timestamp: this.getTimestamp(),
       fileName: file.name,
-      sourcePath: file.path,
-      destinationPath: destinationPath || "",
+      sourcePath: sourceDir,
+      destinationPath: destDir,
       tags,
       hadRuleConflict,
-      wasSkipped
+      wasSkipped,
+      skipReason
     };
   }
   /**
-   * Save log entries to a CSV file
+   * Save log entries to a Markdown file
    */
   async saveLogEntries(operationType, entries) {
     await this.ensureLogDirectory();
     const filename = this.getLogFilename(operationType);
     const fullPath = `${this.logFolderPath}/${filename}`;
-    let csvContent = "Timestamp,File Name,Source Path,Destination Path,Tags,Had Rule Conflict,Was Skipped\n";
+    let mdContent = `# File Movement Log - ${this.getOperationTypeLabel(operationType)}
+
+`;
+    mdContent += `Generated: ${this.getTimestamp()}
+
+`;
+    mdContent += `| Timestamp | File Name | Source Path | Destination Path | Tags | Status | Reason |
+`;
+    mdContent += `| --------- | --------- | ----------- | ---------------- | ---- | ------ | ------ |
+`;
     for (const entry of entries) {
-      csvContent += [
-        entry.timestamp,
-        this.escapeCsvField(entry.fileName),
-        this.escapeCsvField(entry.sourcePath),
-        this.escapeCsvField(entry.destinationPath),
-        this.escapeCsvField(entry.tags.join(", ")),
-        entry.hadRuleConflict ? "Yes" : "No",
-        entry.wasSkipped ? "Yes" : "No"
-      ].join(",") + "\n";
+      const status = entry.wasSkipped ? "\u274C Skipped" : "\u2705 Moved";
+      const reason = entry.skipReason || (entry.hadRuleConflict ? "Rule conflict resolved" : "");
+      mdContent += `| ${entry.timestamp} | ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${this.escapeMarkdownField(entry.tags.join(", "))} | ${status} | ${reason} |
+`;
     }
-    await this.app.vault.adapter.write(fullPath, csvContent);
+    const movedCount = entries.filter((e) => !e.wasSkipped).length;
+    const skippedCount = entries.filter((e) => e.wasSkipped).length;
+    mdContent += `
+## Summary
+
+`;
+    mdContent += `- Total files processed: ${entries.length}
+`;
+    mdContent += `- Files moved: ${movedCount}
+`;
+    mdContent += `- Files skipped: ${skippedCount}
+`;
+    await this.app.vault.adapter.write(fullPath, mdContent);
     return fullPath;
   }
   /**
-   * Escape a field for CSV output
+   * Get a human-readable label for the operation type
    */
-  escapeCsvField(field) {
-    if (/[",\n\r]/.test(field)) {
-      return `"${field.replace(/"/g, '""')}"`;
+  getOperationTypeLabel(operationType) {
+    switch (operationType) {
+      case "SFL" /* SINGLE_FILE */:
+        return "Single File Move";
+      case "CFD" /* CURRENT_FOLDER */:
+        return "Current Folder Move";
+      case "AFL" /* ALL_FOLDERS */:
+        return "All Folders Move";
+      default:
+        return "File Movement";
     }
-    return field;
+  }
+  /**
+   * Escape a field for Markdown table
+   */
+  escapeMarkdownField(field) {
+    if (!field)
+      return "";
+    return field.replace(/\|/g, "\\|").replace(/\n/g, "<br>");
   }
 };
 
@@ -576,7 +616,8 @@ var FileMovementService = class {
                 null,
                 tags,
                 hadRuleConflict,
-                true
+                true,
+                "Rule conflict" /* RULE_CONFLICT */
               ));
               continue;
             }
@@ -591,7 +632,8 @@ var FileMovementService = class {
               targetPath,
               tags,
               hadRuleConflict,
-              true
+              true,
+              "File exists at destination" /* FILE_EXISTS */
             ));
             continue;
           }
@@ -611,7 +653,8 @@ var FileMovementService = class {
             null,
             tags,
             false,
-            true
+            true,
+            "No matching rules" /* NO_MATCHING_RULES */
           ));
         }
       } else {
@@ -621,7 +664,8 @@ var FileMovementService = class {
           null,
           [],
           false,
-          true
+          true,
+          "No tags" /* NO_TAGS */
         ));
       }
     }
@@ -642,6 +686,7 @@ var FileMovementService = class {
         for (const entry of logEntries) {
           if (!entry.wasSkipped) {
             entry.wasSkipped = true;
+            entry.skipReason = "Operation cancelled" /* OPERATION_CANCELLED */;
           }
         }
         const logPath2 = await this.loggingService.saveLogEntries(operationType, logEntries);
@@ -658,10 +703,11 @@ var FileMovementService = class {
       } catch (error) {
         new import_obsidian2.Notice(`Failed to move ${file.name}: ${error.message}`);
         const logEntry = logEntries.find(
-          (entry) => entry.fileName === file.name && entry.sourcePath === file.path && entry.destinationPath === targetPath
+          (entry) => entry.fileName === file.name && entry.sourcePath === file.path.substring(0, file.path.lastIndexOf("/")) && entry.destinationPath === targetPath.substring(0, targetPath.lastIndexOf("/"))
         );
         if (logEntry) {
           logEntry.wasSkipped = true;
+          logEntry.skipReason = "Error during move" /* ERROR */;
         }
       }
     }

@@ -11,6 +11,19 @@ export enum MoveOperationType {
 }
 
 /**
+ * Reasons why a file might be skipped
+ */
+export enum SkipReason {
+  NONE = '',
+  NO_TAGS = 'No tags',
+  NO_MATCHING_RULES = 'No matching rules',
+  RULE_CONFLICT = 'Rule conflict',
+  FILE_EXISTS = 'File exists at destination',
+  OPERATION_CANCELLED = 'Operation cancelled',
+  ERROR = 'Error during move'
+}
+
+/**
  * Structure for a log entry
  */
 export interface LogEntry {
@@ -21,6 +34,7 @@ export interface LogEntry {
   tags: string[];
   hadRuleConflict: boolean;
   wasSkipped: boolean;
+  skipReason: SkipReason;
 }
 
 /**
@@ -78,7 +92,7 @@ export class LoggingService {
    */
   private getLogFilename(operationType: MoveOperationType): string {
     const timestamp = this.getTimestamp().replace(':', '').replace(':', '');
-    return `${operationType}_${timestamp}.csv`;
+    return `${operationType}_${timestamp}.md`;
   }
   
   /**
@@ -89,21 +103,38 @@ export class LoggingService {
     destinationPath: string | null,
     tags: string[],
     hadRuleConflict: boolean,
-    wasSkipped: boolean
+    wasSkipped: boolean,
+    skipReason: SkipReason = SkipReason.NONE
   ): LogEntry {
+    // Get directory path without filename
+    const getDirectoryPath = (path: string): string => {
+      const lastSlashIndex = path.lastIndexOf('/');
+      return lastSlashIndex >= 0 ? path.substring(0, lastSlashIndex) : '';
+    };
+    
+    // Get source directory (without filename)
+    const sourceDir = getDirectoryPath(file.path);
+    
+    // Get destination directory (without filename)
+    let destDir = '';
+    if (destinationPath) {
+      destDir = getDirectoryPath(destinationPath);
+    }
+    
     return {
       timestamp: this.getTimestamp(),
       fileName: file.name,
-      sourcePath: file.path,
-      destinationPath: destinationPath || '',
+      sourcePath: sourceDir,
+      destinationPath: destDir,
       tags,
       hadRuleConflict,
-      wasSkipped
+      wasSkipped,
+      skipReason
     };
   }
   
   /**
-   * Save log entries to a CSV file
+   * Save log entries to a Markdown file
    */
   public async saveLogEntries(
     operationType: MoveOperationType,
@@ -114,37 +145,60 @@ export class LoggingService {
     const filename = this.getLogFilename(operationType);
     const fullPath = `${this.logFolderPath}/${filename}`;
     
-    // Create CSV header
-    let csvContent = 'Timestamp,File Name,Source Path,Destination Path,Tags,Had Rule Conflict,Was Skipped\n';
+    // Create Markdown content
+    let mdContent = `# File Movement Log - ${this.getOperationTypeLabel(operationType)}\n\n`;
+    mdContent += `Generated: ${this.getTimestamp()}\n\n`;
+    
+    // Create table header
+    mdContent += `| Timestamp | File Name | Source Path | Destination Path | Tags | Status | Reason |\n`;
+    mdContent += `| --------- | --------- | ----------- | ---------------- | ---- | ------ | ------ |\n`;
     
     // Add entries
     for (const entry of entries) {
-      csvContent += [
-        entry.timestamp,
-        this.escapeCsvField(entry.fileName),
-        this.escapeCsvField(entry.sourcePath),
-        this.escapeCsvField(entry.destinationPath),
-        this.escapeCsvField(entry.tags.join(', ')),
-        entry.hadRuleConflict ? 'Yes' : 'No',
-        entry.wasSkipped ? 'Yes' : 'No'
-      ].join(',') + '\n';
+      const status = entry.wasSkipped ? '❌ Skipped' : '✅ Moved';
+      const reason = entry.skipReason || (entry.hadRuleConflict ? 'Rule conflict resolved' : '');
+      
+      mdContent += `| ${entry.timestamp} | ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${this.escapeMarkdownField(entry.tags.join(', '))} | ${status} | ${reason} |\n`;
     }
     
+    // Add summary
+    const movedCount = entries.filter(e => !e.wasSkipped).length;
+    const skippedCount = entries.filter(e => e.wasSkipped).length;
+    
+    mdContent += `\n## Summary\n\n`;
+    mdContent += `- Total files processed: ${entries.length}\n`;
+    mdContent += `- Files moved: ${movedCount}\n`;
+    mdContent += `- Files skipped: ${skippedCount}\n`;
+    
     // Write to file
-    await this.app.vault.adapter.write(fullPath, csvContent);
+    await this.app.vault.adapter.write(fullPath, mdContent);
     
     return fullPath;
   }
   
   /**
-   * Escape a field for CSV output
+   * Get a human-readable label for the operation type
    */
-  private escapeCsvField(field: string): string {
-    // If the field contains commas, quotes, or newlines, wrap it in quotes
-    if (/[",\n\r]/.test(field)) {
-      // Double up any quotes
-      return `"${field.replace(/"/g, '""')}"`;
+  private getOperationTypeLabel(operationType: MoveOperationType): string {
+    switch (operationType) {
+      case MoveOperationType.SINGLE_FILE:
+        return 'Single File Move';
+      case MoveOperationType.CURRENT_FOLDER:
+        return 'Current Folder Move';
+      case MoveOperationType.ALL_FOLDERS:
+        return 'All Folders Move';
+      default:
+        return 'File Movement';
     }
-    return field;
+  }
+  
+  /**
+   * Escape a field for Markdown table
+   */
+  private escapeMarkdownField(field: string): string {
+    if (!field) return '';
+    
+    // Escape pipe characters and line breaks for markdown tables
+    return field.replace(/\|/g, '\\|').replace(/\n/g, '<br>');
   }
 } 

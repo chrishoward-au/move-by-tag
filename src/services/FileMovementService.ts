@@ -2,7 +2,7 @@ import { App, Modal, Notice, TFile } from 'obsidian';
 import { FileMovement, MoveByTagSettings, TagMappingMatch, MoveScope } from '../models/types';
 import { FileUtils } from '../utils/FileUtils';
 import { TagMappingService } from './TagMappingService';
-import { LoggingService, MoveOperationType, LogEntry } from './LoggingService';
+import { LoggingService, MoveOperationType, LogEntry, SkipReason } from './LoggingService';
 
 export class FileMovementService {
   private app: App;
@@ -97,7 +97,8 @@ export class FileMovementService {
                 null,
                 tags,
                 hadRuleConflict,
-                true
+                true,
+                SkipReason.RULE_CONFLICT
               ));
               
               continue;
@@ -118,7 +119,8 @@ export class FileMovementService {
               targetPath,
               tags,
               hadRuleConflict,
-              true
+              true,
+              SkipReason.FILE_EXISTS
             ));
             
             continue;
@@ -144,7 +146,8 @@ export class FileMovementService {
             null,
             tags,
             false,
-            true
+            true,
+            SkipReason.NO_MATCHING_RULES
           ));
         }
       } else {
@@ -156,7 +159,8 @@ export class FileMovementService {
           null,
           [],
           false,
-          true
+          true,
+          SkipReason.NO_TAGS
         ));
       }
     }
@@ -187,6 +191,7 @@ export class FileMovementService {
         for (const entry of logEntries) {
           if (!entry.wasSkipped) {
             entry.wasSkipped = true;
+            entry.skipReason = SkipReason.OPERATION_CANCELLED;
           }
         }
         
@@ -211,12 +216,13 @@ export class FileMovementService {
         // Update log entry to mark as skipped
         const logEntry = logEntries.find(entry => 
           entry.fileName === file.name && 
-          entry.sourcePath === file.path &&
-          entry.destinationPath === targetPath
+          entry.sourcePath === file.path.substring(0, file.path.lastIndexOf('/')) &&
+          entry.destinationPath === targetPath.substring(0, targetPath.lastIndexOf('/'))
         );
         
         if (logEntry) {
           logEntry.wasSkipped = true;
+          logEntry.skipReason = SkipReason.ERROR;
         }
       }
     }
