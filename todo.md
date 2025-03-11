@@ -1,0 +1,2 @@
+- Maintain a log of moved files
+- Command to move files in current folder with option for child folders
