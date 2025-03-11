@@ -45,15 +45,11 @@ export default class MoveByTag extends Plugin {
       id: 'move-by-tag',
       name: 'Move by Tag',
       callback: async () => {
-        const modal = new MoveByTagModal(this.app, this);
-        modal.onClose = () => {
-      // Clean up suggestions when modal is closed
-      const suggestionsContainer = document.getElementById('folder-suggestions');
-      if (suggestionsContainer) {
-        suggestionsContainer.remove();
-      }
-    };
-   modal.open();
+        // Create an instance of MoveByTagModal but don't show it
+        const processor = new MoveByTagModal(this.app, this);
+        
+        // Directly call the moveFilesByTag method without showing the modal
+        await processor.moveFilesByTag();
       },
     });
 
@@ -219,7 +215,6 @@ class MoveByTagModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    contentEl.setText('Move files based on their tags');
     this.plugin.log('Opening Move by Tag modal');
 
     // Add a button to trigger the file movement process
@@ -426,30 +421,94 @@ class MoveByTagModal extends Modal {
       });
 
       const list = container.createEl('div');
-      matches.forEach(({ mapping, matchedTags }) => {
-        const row = list.createEl('div', { cls: 'move-by-tag-rule-option' });
-
-        const button = row.createEl('button', {
+      
+      // Create a form to hold the radio buttons
+      const form = list.createEl('form', { cls: 'move-by-tag-rule-form' });
+      
+      // Add some styling to the form
+      form.style.marginBottom = '10px';
+      
+      // Create radio buttons for each option
+      matches.forEach(({ mapping, matchedTags }, index) => {
+        const row = form.createEl('div', { cls: 'move-by-tag-rule-option' });
+        row.style.marginBottom = '10px';
+        row.style.display = 'flex';
+        row.style.alignItems = 'center';
+        
+        // Create radio button
+        const radio = row.createEl('input', {
+          type: 'radio',
+          attr: {
+            name: 'folder-option',
+            id: `folder-option-${index}`,
+            value: mapping.folder
+          }
+        });
+        
+        // Select the first option by default
+        if (index === 0) {
+          radio.checked = true;
+        }
+        
+        // Create label for the radio button
+        const label = row.createEl('label', {
           text: `Move to ${mapping.folder} (tags: ${mapping.tags.map(t => '#' + t).join(' + ')})`,
-          cls: 'mod-cta'
+          attr: { for: `folder-option-${index}` }
         });
-        button.style.marginBottom = '10px'; // Add margin to the bottom of the button
-
-        button.addEventListener('click', () => {
-          modal.close();
-          resolve(mapping.folder);
-        });
+        label.style.marginLeft = '10px';
+        label.style.cursor = 'pointer';
       });
-
-      // Add cancel button
-      const cancelButton = container.createEl('button', {
+      
+      // Add "Skip this file" as the last radio option
+      const skipRow = form.createEl('div', { cls: 'move-by-tag-rule-option' });
+      skipRow.style.marginBottom = '10px';
+      skipRow.style.display = 'flex';
+      skipRow.style.alignItems = 'center';
+      
+      const skipRadio = skipRow.createEl('input', {
+        type: 'radio',
+        attr: {
+          name: 'folder-option',
+          id: 'folder-option-skip',
+          value: 'skip'
+        }
+      });
+      
+      const skipLabel = skipRow.createEl('label', {
         text: 'Skip this file',
-        cls: 'move-by-tag-cancel'
+        attr: { for: 'folder-option-skip' }
       });
-
-      cancelButton.addEventListener('click', () => {
-        modal.close();
-        resolve(null);
+      skipLabel.style.marginLeft = '10px';
+      skipLabel.style.cursor = 'pointer';
+      
+      // Add a submit button at the bottom
+      const submitButton = form.createEl('button', {
+        text: 'Continue',
+        cls: 'mod-cta',
+        type: 'button' // Prevent form submission
+      });
+      
+      submitButton.addEventListener('click', () => {
+        // Find the selected radio button
+        const selectedRadio = form.querySelector('input[name="folder-option"]:checked') as HTMLInputElement;
+        if (selectedRadio) {
+          modal.close();
+          // If "Skip" was selected, resolve with null
+          if (selectedRadio.value === 'skip') {
+            resolve(null);
+          } else {
+            resolve(selectedRadio.value);
+          }
+        } else {
+          // If somehow no option is selected, use the first one
+          if (matches.length > 0) {
+            modal.close();
+            resolve(matches[0].mapping.folder);
+          } else {
+            modal.close();
+            resolve(null);
+          }
+        }
       });
 
       modal.onClose = () => {
