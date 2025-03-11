@@ -231,6 +231,8 @@ export class FileMovementService {
 
     // Perform movements
     let successCount = 0;
+    let alreadyInPlaceCount = 0;
+    
     for (const { file, targetPath } of movements) {
       try {
         await this.app.vault.rename(file, targetPath);
@@ -252,14 +254,24 @@ export class FileMovementService {
         }
       }
     }
-
-    new Notice(`Successfully moved ${successCount} of ${movements.length} files`);
+    
+    // Count files already in place
+    alreadyInPlaceCount = logEntries.filter(entry => 
+      entry.skipReason === SkipReason.ALREADY_IN_PLACE
+    ).length;
+    
+    // Show summary notice
+    if (alreadyInPlaceCount > 0) {
+      new Notice(`Moved ${successCount} files, ${alreadyInPlaceCount} already in correct location`);
+    } else {
+      new Notice(`Successfully moved ${successCount} of ${movements.length} files`);
+    }
     
     // Save the log file
     const logPath = await this.loggingService.saveLogEntries(operationType, logEntries);
     this.logger(`Log saved to ${logPath}`);
     
-    return { total: movements.length, moved: successCount };
+    return { total: movements.length + alreadyInPlaceCount, moved: successCount + alreadyInPlaceCount };
   }
 
   /**

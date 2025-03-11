@@ -500,6 +500,26 @@ var LoggingService = class {
     };
   }
   /**
+   * Get the appropriate status indicator for a log entry
+   */
+  getStatusIndicator(entry) {
+    if (!entry.wasSkipped) {
+      return "\u{1F7E2}" /* SUCCESS */;
+    }
+    switch (entry.skipReason) {
+      case "Already in correct folder" /* ALREADY_IN_PLACE */:
+      case "No tags" /* NO_TAGS */:
+      case "No matching rules" /* NO_MATCHING_RULES */:
+        return "\u{1F7E0}" /* WARNING */;
+      case "Rule conflict" /* RULE_CONFLICT */:
+      case "File exists at destination" /* FILE_EXISTS */:
+      case "Operation cancelled" /* OPERATION_CANCELLED */:
+      case "Error during move" /* ERROR */:
+      default:
+        return "\u{1F534}" /* ERROR */;
+    }
+  }
+  /**
    * Save log entries to a Markdown file
    */
   async saveLogEntries(operationType, entries) {
@@ -517,7 +537,7 @@ var LoggingService = class {
     mdContent += `| --------- | ----------- | ---------------- | ---- | ------ | ------ |
 `;
     for (const entry of entries) {
-      const status = entry.wasSkipped ? "\u274C" : "\u2705";
+      const status = this.getStatusIndicator(entry);
       const reason = entry.skipReason || (entry.hadRuleConflict ? "Rule conflict resolved" : "");
       mdContent += `| ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${this.escapeMarkdownField(entry.tags.join(", "))} | ${status} | ${reason} |
 `;
@@ -715,6 +735,7 @@ var FileMovementService = class {
       }
     }
     let successCount = 0;
+    let alreadyInPlaceCount = 0;
     for (const { file, targetPath } of movements) {
       try {
         await this.app.vault.rename(file, targetPath);
@@ -731,10 +752,17 @@ var FileMovementService = class {
         }
       }
     }
-    new import_obsidian2.Notice(`Successfully moved ${successCount} of ${movements.length} files`);
+    alreadyInPlaceCount = logEntries.filter(
+      (entry) => entry.skipReason === "Already in correct folder" /* ALREADY_IN_PLACE */
+    ).length;
+    if (alreadyInPlaceCount > 0) {
+      new import_obsidian2.Notice(`Moved ${successCount} files, ${alreadyInPlaceCount} already in correct location`);
+    } else {
+      new import_obsidian2.Notice(`Successfully moved ${successCount} of ${movements.length} files`);
+    }
     const logPath = await this.loggingService.saveLogEntries(operationType, logEntries);
     this.logger(`Log saved to ${logPath}`);
-    return { total: movements.length, moved: successCount };
+    return { total: movements.length + alreadyInPlaceCount, moved: successCount + alreadyInPlaceCount };
   }
   /**
    * Get the move operation type based on scope

@@ -11,6 +11,15 @@ export enum MoveOperationType {
 }
 
 /**
+ * Status indicators for log entries
+ */
+export enum StatusIndicator {
+  SUCCESS = '🟢', // Green light - successful move
+  WARNING = '🟠', // Orange light - skipped but not an error (already in place, no tags, no matching rules)
+  ERROR = '🔴'    // Red light - error or user intervention (file exists, rule conflict, cancelled, error)
+}
+
+/**
  * Reasons why a file might be skipped
  */
 export enum SkipReason {
@@ -137,6 +146,30 @@ export class LoggingService {
   }
   
   /**
+   * Get the appropriate status indicator for a log entry
+   */
+  private getStatusIndicator(entry: LogEntry): StatusIndicator {
+    if (!entry.wasSkipped) {
+      return StatusIndicator.SUCCESS; // Green for successful moves
+    }
+    
+    // Determine which skipped files get orange vs. red
+    switch (entry.skipReason) {
+      case SkipReason.ALREADY_IN_PLACE:
+      case SkipReason.NO_TAGS:
+      case SkipReason.NO_MATCHING_RULES:
+        return StatusIndicator.WARNING; // Orange for non-error skips
+        
+      case SkipReason.RULE_CONFLICT:
+      case SkipReason.FILE_EXISTS:
+      case SkipReason.OPERATION_CANCELLED:
+      case SkipReason.ERROR:
+      default:
+        return StatusIndicator.ERROR; // Red for errors and user interventions
+    }
+  }
+  
+  /**
    * Save log entries to a Markdown file
    */
   public async saveLogEntries(
@@ -158,7 +191,7 @@ export class LoggingService {
     
     // Add entries
     for (const entry of entries) {
-      const status = entry.wasSkipped ? '❌' : '✅';
+      const status = this.getStatusIndicator(entry);
       const reason = entry.skipReason || (entry.hadRuleConflict ? 'Rule conflict resolved' : '');
       
       mdContent += `| ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${this.escapeMarkdownField(entry.tags.join(', '))} | ${status} | ${reason} |\n`;
