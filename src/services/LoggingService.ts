@@ -109,7 +109,9 @@ export class LoggingService {
     // Get directory path without filename
     const getDirectoryPath = (path: string): string => {
       const lastSlashIndex = path.lastIndexOf('/');
-      return lastSlashIndex >= 0 ? path.substring(0, lastSlashIndex) : '';
+      const dirPath = lastSlashIndex >= 0 ? path.substring(0, lastSlashIndex) : '';
+      // Ensure path starts with a slash if it's not empty
+      return dirPath && !dirPath.startsWith('/') ? `/${dirPath}` : dirPath;
     };
     
     // Get source directory (without filename)

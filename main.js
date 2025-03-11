@@ -480,7 +480,8 @@ var LoggingService = class {
   createLogEntry(file, destinationPath, tags, hadRuleConflict, wasSkipped, skipReason = "" /* NONE */) {
     const getDirectoryPath = (path) => {
       const lastSlashIndex = path.lastIndexOf("/");
-      return lastSlashIndex >= 0 ? path.substring(0, lastSlashIndex) : "";
+      const dirPath = lastSlashIndex >= 0 ? path.substring(0, lastSlashIndex) : "";
+      return dirPath && !dirPath.startsWith("/") ? `/${dirPath}` : dirPath;
     };
     const sourceDir = getDirectoryPath(file.path);
     let destDir = "";
