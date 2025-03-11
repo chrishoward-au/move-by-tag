@@ -27,7 +27,7 @@ __export(main_exports, {
   default: () => MoveByTag
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/models/types.ts
 var DEFAULT_SETTINGS = {
@@ -935,6 +935,130 @@ var InfoDialog = class extends import_obsidian3.Modal {
   }
 };
 
+// src/ui/MoveOptionsModal.ts
+var import_obsidian4 = require("obsidian");
+var MoveOptionsModal = class extends import_obsidian4.Modal {
+  constructor(app, settings, logger) {
+    super(app);
+    this.settings = settings;
+    this.logger = logger;
+    this.activeFile = this.app.workspace.getActiveFile();
+    const fileUtils = new FileUtils(this.app);
+    const tagMappingService = new TagMappingService();
+    this.fileMovementService = new FileMovementService(
+      this.app,
+      this.settings,
+      fileUtils,
+      tagMappingService,
+      this.logger
+    );
+  }
+  onOpen() {
+    const { contentEl } = this;
+    this.titleEl.setText("Move by Tag Options");
+    const container = contentEl.createDiv({ cls: "move-options-container" });
+    container.style.padding = "20px";
+    container.style.maxWidth = "500px";
+    const description = container.createEl("p", {
+      text: "Choose how you want to move files based on tags:",
+      cls: "move-options-description"
+    });
+    description.style.marginBottom = "20px";
+    description.style.color = "var(--text-normal)";
+    const buttonContainer = container.createDiv({ cls: "move-options-buttons" });
+    buttonContainer.style.display = "flex";
+    buttonContainer.style.flexDirection = "column";
+    buttonContainer.style.gap = "10px";
+    this.createOptionButton(
+      buttonContainer,
+      "Move Current File",
+      "Move only the currently active file based on its tags",
+      async () => {
+        if (this.activeFile) {
+          this.close();
+          await this.fileMovementService.moveFile(this.activeFile);
+        }
+      },
+      !this.activeFile
+      // Disabled if no active file
+    );
+    this.createOptionButton(
+      buttonContainer,
+      "Move Files in Current Folder",
+      "Move all files in the same folder as the active file",
+      async () => {
+        if (this.activeFile) {
+          this.close();
+          await this.fileMovementService.moveFiles("current_folder" /* CURRENT_FOLDER */, this.activeFile);
+        }
+      },
+      !this.activeFile
+      // Disabled if no active file
+    );
+    this.createOptionButton(
+      buttonContainer,
+      "Move Files in All Folders",
+      "Move files across the vault based on settings (respects folder exclusions)",
+      async () => {
+        this.close();
+        await this.fileMovementService.moveFiles("all_folders" /* ALL_FOLDERS */);
+      }
+    );
+    const cancelButtonContainer = container.createDiv();
+    cancelButtonContainer.style.marginTop = "20px";
+    cancelButtonContainer.style.display = "flex";
+    cancelButtonContainer.style.justifyContent = "flex-end";
+    const cancelButton = cancelButtonContainer.createEl("button", {
+      text: "Cancel",
+      cls: "mod-warning"
+    });
+    cancelButton.addEventListener("click", () => {
+      this.close();
+    });
+  }
+  /**
+   * Create an option button with description
+   */
+  createOptionButton(container, label, description, onClick, disabled = false) {
+    const buttonWrapper = container.createDiv({ cls: "move-option-button-wrapper" });
+    buttonWrapper.style.display = "flex";
+    buttonWrapper.style.flexDirection = "column";
+    buttonWrapper.style.border = "1px solid var(--background-modifier-border)";
+    buttonWrapper.style.borderRadius = "4px";
+    buttonWrapper.style.padding = "10px";
+    if (!disabled) {
+      buttonWrapper.style.cursor = "pointer";
+      buttonWrapper.style.transition = "background-color 0.2s ease";
+      buttonWrapper.addEventListener("mouseover", () => {
+        buttonWrapper.style.backgroundColor = "var(--background-secondary-alt)";
+      });
+      buttonWrapper.addEventListener("mouseout", () => {
+        buttonWrapper.style.backgroundColor = "";
+      });
+      buttonWrapper.addEventListener("click", onClick);
+    } else {
+      buttonWrapper.style.opacity = "0.5";
+      buttonWrapper.style.cursor = "not-allowed";
+    }
+    const labelEl = buttonWrapper.createEl("div", {
+      text: label,
+      cls: "move-option-label"
+    });
+    labelEl.style.fontWeight = "bold";
+    labelEl.style.marginBottom = "5px";
+    const descriptionEl = buttonWrapper.createEl("div", {
+      text: description,
+      cls: "move-option-description"
+    });
+    descriptionEl.style.fontSize = "0.85em";
+    descriptionEl.style.color = "var(--text-muted)";
+  }
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
+  }
+};
+
 // src/commands/CommandManager.ts
 var CommandManager = class {
   constructor(plugin, app, settings, fileUtils, logger) {
@@ -951,6 +1075,7 @@ var CommandManager = class {
     this.registerMoveByTagCommand();
     this.registerShowFileInfoCommand();
     this.registerMoveInCurrentFolderCommand();
+    this.registerMoveOptionsCommand();
   }
   /**
    * Register the Move by Tag command
@@ -982,20 +1107,26 @@ var CommandManager = class {
         const activeFile = this.app.workspace.getActiveFile();
         if (activeFile) {
           if (!checking) {
-            const fileMovementService = new FileMovementService(
-              this.app,
-              this.settings,
-              this.fileUtils,
-              new TagMappingService(),
-              this.logger
-            );
-            fileMovementService.moveFiles("current_folder" /* CURRENT_FOLDER */, activeFile);
+            this.moveFilesInCurrentFolder(activeFile);
           }
           return true;
         }
         return false;
       }
     });
+  }
+  /**
+   * Move files in the current folder
+   */
+  async moveFilesInCurrentFolder(activeFile) {
+    const fileMovementService = new FileMovementService(
+      this.app,
+      this.settings,
+      this.fileUtils,
+      new TagMappingService(),
+      this.logger
+    );
+    await fileMovementService.moveFiles("current_folder" /* CURRENT_FOLDER */, activeFile);
   }
   /**
    * Register the Show File Info command
@@ -1056,10 +1187,22 @@ Tags: ${tags.map((t) => "#" + t).join(", ") || "None"}
     }
     new InfoDialog(this.app, infoText, file, this.settings, this.logger).open();
   }
+  /**
+   * Register the Move Options command
+   */
+  registerMoveOptionsCommand() {
+    this.plugin.addCommand({
+      id: "move-options",
+      name: "Show Move Options",
+      callback: () => {
+        new MoveOptionsModal(this.app, this.settings, this.logger).open();
+      }
+    });
+  }
 };
 
 // src/main.ts
-var MoveByTag = class extends import_obsidian4.Plugin {
+var MoveByTag = class extends import_obsidian5.Plugin {
   log(message) {
     if (this.settings.enableLogging) {
       console.log(`[Move by Tag] ${message}`);

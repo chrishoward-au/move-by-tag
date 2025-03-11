@@ -5,6 +5,7 @@ import { InfoDialog } from '../ui/InfoDialog';
 import { FileUtils } from '../utils/FileUtils';
 import { FileMovementService } from '../services/FileMovementService';
 import { TagMappingService } from '../services/TagMappingService';
+import { MoveOptionsModal } from '../ui/MoveOptionsModal';
 
 export class CommandManager {
   private plugin: Plugin;
@@ -34,6 +35,7 @@ export class CommandManager {
     this.registerMoveByTagCommand();
     this.registerShowFileInfoCommand();
     this.registerMoveInCurrentFolderCommand();
+    this.registerMoveOptionsCommand();
   }
 
   /**
@@ -69,21 +71,28 @@ export class CommandManager {
         const activeFile = this.app.workspace.getActiveFile();
         if (activeFile) {
           if (!checking) {
-            const fileMovementService = new FileMovementService(
-              this.app,
-              this.settings,
-              this.fileUtils,
-              new TagMappingService(),
-              this.logger
-            );
-            
-            fileMovementService.moveFiles(MoveScope.CURRENT_FOLDER, activeFile);
+            this.moveFilesInCurrentFolder(activeFile);
           }
           return true;
         }
         return false;
       }
     });
+  }
+
+  /**
+   * Move files in the current folder
+   */
+  private async moveFilesInCurrentFolder(activeFile: TFile): Promise<void> {
+    const fileMovementService = new FileMovementService(
+      this.app,
+      this.settings,
+      this.fileUtils,
+      new TagMappingService(),
+      this.logger
+    );
+    
+    await fileMovementService.moveFiles(MoveScope.CURRENT_FOLDER, activeFile);
   }
 
   /**
@@ -148,5 +157,18 @@ export class CommandManager {
     }
     
     new InfoDialog(this.app, infoText, file, this.settings, this.logger).open();
+  }
+
+  /**
+   * Register the Move Options command
+   */
+  private registerMoveOptionsCommand(): void {
+    this.plugin.addCommand({
+      id: 'move-options',
+      name: 'Show Move Options',
+      callback: () => {
+        new MoveOptionsModal(this.app, this.settings, this.logger).open();
+      }
+    });
   }
 } 
