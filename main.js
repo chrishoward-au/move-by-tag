@@ -1310,6 +1310,7 @@ var MoveOptionsModal = class extends import_obsidian4.Modal {
     } else {
       buttonWrapper.style.opacity = "0.5";
       buttonWrapper.style.cursor = "not-allowed";
+      buttonWrapper.title = "Requires an open file";
     }
     const labelEl = buttonWrapper.createEl("div", {
       text: label,

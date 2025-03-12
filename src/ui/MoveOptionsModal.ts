@@ -140,6 +140,7 @@ export class MoveOptionsModal extends Modal {
     } else {
       buttonWrapper.style.opacity = '0.5';
       buttonWrapper.style.cursor = 'not-allowed';
+      buttonWrapper.title ='Requires an open file';
     }
     
     const labelEl = buttonWrapper.createEl('div', { 
