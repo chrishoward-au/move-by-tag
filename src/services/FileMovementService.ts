@@ -2,7 +2,7 @@ import { App, Modal, Notice, TFile } from 'obsidian';
 import { FileMovement, MoveByTagSettings, TagMappingMatch, MoveScope } from '../models/types';
 import { FileUtils } from '../utils/FileUtils';
 import { TagMappingService } from './TagMappingService';
-import { LoggingService, MoveOperationType, LogEntry, SkipReason } from './LoggingService';
+import { LoggingService, MoveOperationType, LogEntry, ResultDescription } from './LoggingService';
 
 export class FileMovementService {
   private app: App;
@@ -99,9 +99,7 @@ export class FileMovementService {
                 file,
                 null,
                 allMatchedTags,
-                hadRuleConflict,
-                true,
-                SkipReason.RULE_CONFLICT
+                ResultDescription.RULE_CONFLICT
               ));
               
               continue;
@@ -118,10 +116,12 @@ export class FileMovementService {
           const targetPath = `${targetFolder}/${file.name}`;
 
           // Check if the file is already in the correct folder - compare normalized paths
-          const currentFolder = file.path.substring(0, file.path.lastIndexOf('/'));
+          const currentFolder = '/'+file.path.substring(0, file.path.lastIndexOf('/'));
           const normalizedCurrentFolder = currentFolder.replace(/\/+/g, '/').replace(/\/$/, '');
           const normalizedTargetFolder = targetFolder.replace(/\/+/g, '/').replace(/\/$/, '');
           
+          console.log(normalizedCurrentFolder, normalizedTargetFolder);
+
           if (normalizedCurrentFolder === normalizedTargetFolder) {
             this.logger(`File is already in the correct folder: ${targetFolder}`);
             new Notice(`Skipping ${file.name}: Already in correct folder`);
@@ -131,11 +131,9 @@ export class FileMovementService {
               file,
               targetPath,
               matchedTags,
-              hadRuleConflict,
-              true,
-              SkipReason.ALREADY_IN_PLACE
+              ResultDescription.ALREADY_IN_PLACE
             ));
-            
+            console.log(logEntries);
             continue;
           }
 
@@ -152,9 +150,7 @@ export class FileMovementService {
                 file,
                 targetPath,
                 matchedTags,
-                hadRuleConflict,
-                true,
-                SkipReason.FILE_EXISTS
+                ResultDescription.FILE_EXISTS
               ));
               
               continue;
@@ -169,8 +165,7 @@ export class FileMovementService {
             file,
             targetPath,
             matchedTags,
-            hadRuleConflict,
-            false
+            ResultDescription.MOVED
           ));
         } else {
           this.logger(`No matching folder found for tags: ${tags.join(', ')}`);
@@ -180,9 +175,7 @@ export class FileMovementService {
             file,
             null,
             [], // No matched tags
-            false,
-            true,
-            SkipReason.NO_MATCHING_RULES
+            ResultDescription.NO_MATCHING_RULES
           ));
         }
       } else {
@@ -193,9 +186,7 @@ export class FileMovementService {
           file,
           null,
           [],
-          false,
-          true,
-          SkipReason.NO_TAGS
+          ResultDescription.NO_TAGS
         ));
       }
     }
@@ -224,10 +215,10 @@ export class FileMovementService {
         
         // Update log entries to mark all as skipped
         for (const entry of logEntries) {
-          if (!entry.wasSkipped) {
-            entry.wasSkipped = true;
-            entry.skipReason = SkipReason.OPERATION_CANCELLED;
-          }
+          // if (!entry.wasSkipped) {
+          //   entry.wasSkipped = true;
+          //   entry.skipReason = ResultDescription.OPERATION_CANCELLED;
+          // }
         }
         
         // Save log even if operation was cancelled
@@ -258,15 +249,15 @@ export class FileMovementService {
         );
         
         if (logEntry) {
-          logEntry.wasSkipped = true;
-          logEntry.skipReason = SkipReason.ERROR;
+          // logEntry.wasSkipped = true;
+          // logEntry.skipReason = ResultDescription.ERROR;
         }
       }
     }
     
     // Count files already in place
     alreadyInPlaceCount = logEntries.filter(entry => 
-      entry.skipReason === SkipReason.ALREADY_IN_PLACE
+      entry.result === ResultDescription.ALREADY_IN_PLACE
     ).length;
     
     // Show summary notice

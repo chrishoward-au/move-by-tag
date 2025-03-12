@@ -22,15 +22,16 @@ export enum StatusIndicator {
 /**
  * Reasons why a file might be skipped
  */
-export enum SkipReason {
+export enum ResultDescription {
   NONE = '',
   NO_TAGS = 'No tags',
   NO_MATCHING_RULES = 'No matching rules',
-  RULE_CONFLICT = 'Rule conflict',
+  RULE_CONFLICT = 'Rule conflict - user skipped',
   FILE_EXISTS = 'File exists at destination',
   ALREADY_IN_PLACE = 'Already in correct folder',
   OPERATION_CANCELLED = 'Operation cancelled',
-  ERROR = 'Error during move'
+  ERROR = 'Error during move',
+  MOVED = 'Moved successfully'
 }
 
 /**
@@ -42,9 +43,7 @@ export interface LogEntry {
   sourcePath: string;
   destinationPath: string;
   tags: string[];
-  hadRuleConflict: boolean;
-  wasSkipped: boolean;
-  skipReason: SkipReason;
+  result: string;
 }
 
 /**
@@ -112,10 +111,9 @@ export class LoggingService {
     file: TFile,
     destinationPath: string | null,
     tags: string[],
-    hadRuleConflict: boolean,
-    wasSkipped: boolean,
-    skipReason: SkipReason = SkipReason.NONE
+    result: ResultDescription = ResultDescription.MOVED
   ): LogEntry {
+
     // Get directory path without filename
     const getDirectoryPath = (path: string): string => {
       const lastSlashIndex = path.lastIndexOf('/');
@@ -139,9 +137,7 @@ export class LoggingService {
       sourcePath: sourceDir,
       destinationPath: destDir,
       tags,
-      hadRuleConflict,
-      wasSkipped,
-      skipReason
+      result
     };
   }
   
@@ -149,21 +145,22 @@ export class LoggingService {
    * Get the appropriate status indicator for a log entry
    */
   private getStatusIndicator(entry: LogEntry): StatusIndicator {
-    if (!entry.wasSkipped) {
-      return StatusIndicator.SUCCESS; // Green for successful moves
-    }
 
     // Determine which skipped files get orange vs. red
-    switch (entry.skipReason) {
-      case SkipReason.ALREADY_IN_PLACE:
-      case SkipReason.NO_TAGS:
-      case SkipReason.NO_MATCHING_RULES:
+    switch (entry.result) {
+      case ResultDescription.NONE:
+      case ResultDescription.MOVED:
+        return StatusIndicator.SUCCESS;
+
+      case ResultDescription.ALREADY_IN_PLACE:
+      case ResultDescription.NO_TAGS:
+      case ResultDescription.NO_MATCHING_RULES:
         return StatusIndicator.WARNING; // Orange for non-error skips
         
-      case SkipReason.RULE_CONFLICT:
-      case SkipReason.FILE_EXISTS:
-      case SkipReason.OPERATION_CANCELLED:
-      case SkipReason.ERROR:
+      case ResultDescription.RULE_CONFLICT:
+      case ResultDescription.FILE_EXISTS:
+      case ResultDescription.OPERATION_CANCELLED:
+      case ResultDescription.ERROR:
       default:
         return StatusIndicator.ERROR; // Red for errors and user interventions
     }
@@ -203,20 +200,20 @@ export class LoggingService {
     // Add entries
     for (const entry of entries) {
       const status = this.getStatusIndicator(entry);
-      const reason = entry.skipReason || (entry.hadRuleConflict ? 'Rule conflict resolved' : '');
+      const reason = entry.result;
       const formattedTags = this.formatTags(entry.tags);
       
       mdContent += `| ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${formattedTags} | ${status} | ${reason} |\n`;
     }
     
     // Add summary
-    const movedCount = entries.filter(e => !e.wasSkipped).length;
-    const skippedCount = entries.filter(e => e.wasSkipped).length;
+    // const movedCount = entries.filter(e => !e.wasSkipped).length;
+    // const skippedCount = entries.filter(e => e.wasSkipped).length;
     
     mdContent += `\n## Summary\n\n`;
     mdContent += `- Total files processed: ${entries.length}\n`;
-    mdContent += `- Files moved: ${movedCount}\n`;
-    mdContent += `- Files skipped: ${skippedCount}\n`;
+    // mdContent += `- Files moved: ${movedCount}\n`;
+    // mdContent += `- Files skipped: ${skippedCount}\n`;
     
     // Write to file
     await this.app.vault.adapter.write(fullPath, mdContent);

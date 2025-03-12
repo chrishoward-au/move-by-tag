@@ -477,7 +477,7 @@ var LoggingService = class {
   /**
    * Create a log entry for a file movement
    */
-  createLogEntry(file, destinationPath, tags, hadRuleConflict, wasSkipped, skipReason = "" /* NONE */) {
+  createLogEntry(file, destinationPath, tags, result = "Moved successfully" /* MOVED */) {
     const getDirectoryPath = (path) => {
       const lastSlashIndex = path.lastIndexOf("/");
       const dirPath = lastSlashIndex >= 0 ? path.substring(0, lastSlashIndex) : "";
@@ -494,19 +494,17 @@ var LoggingService = class {
       sourcePath: sourceDir,
       destinationPath: destDir,
       tags,
-      hadRuleConflict,
-      wasSkipped,
-      skipReason
+      result
     };
   }
   /**
    * Get the appropriate status indicator for a log entry
    */
   getStatusIndicator(entry) {
-    if (!entry.wasSkipped) {
-      return "\u{1F7E2}" /* SUCCESS */;
-    }
-    switch (entry.skipReason) {
+    switch (entry.result) {
+      case "" /* NONE */:
+      case "Moved successfully" /* MOVED */:
+        return "\u{1F7E2}" /* SUCCESS */;
       case "Already in correct folder" /* ALREADY_IN_PLACE */:
       case "No tags" /* NO_TAGS */:
       case "No matching rules" /* NO_MATCHING_RULES */:
@@ -544,22 +542,16 @@ var LoggingService = class {
 `;
     for (const entry of entries) {
       const status = this.getStatusIndicator(entry);
-      const reason = entry.skipReason || (entry.hadRuleConflict ? "Rule conflict resolved" : "");
+      const reason = entry.result;
       const formattedTags = this.formatTags(entry.tags);
       mdContent += `| ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${formattedTags} | ${status} | ${reason} |
 `;
     }
-    const movedCount = entries.filter((e) => !e.wasSkipped).length;
-    const skippedCount = entries.filter((e) => e.wasSkipped).length;
     mdContent += `
 ## Summary
 
 `;
     mdContent += `- Total files processed: ${entries.length}
-`;
-    mdContent += `- Files moved: ${movedCount}
-`;
-    mdContent += `- Files skipped: ${skippedCount}
 `;
     await this.app.vault.adapter.write(fullPath, mdContent);
     return fullPath;
@@ -645,8 +637,6 @@ var FileMovementService = class {
                 file,
                 null,
                 allMatchedTags,
-                hadRuleConflict,
-                true,
                 "Rule conflict" /* RULE_CONFLICT */
               ));
               continue;
@@ -659,9 +649,10 @@ var FileMovementService = class {
           }
           this.logger(`Selected target folder: ${targetFolder}`);
           const targetPath = `${targetFolder}/${file.name}`;
-          const currentFolder = file.path.substring(0, file.path.lastIndexOf("/"));
+          const currentFolder = "/" + file.path.substring(0, file.path.lastIndexOf("/"));
           const normalizedCurrentFolder = currentFolder.replace(/\/+/g, "/").replace(/\/$/, "");
           const normalizedTargetFolder = targetFolder.replace(/\/+/g, "/").replace(/\/$/, "");
+          console.log(normalizedCurrentFolder, normalizedTargetFolder);
           if (normalizedCurrentFolder === normalizedTargetFolder) {
             this.logger(`File is already in the correct folder: ${targetFolder}`);
             new import_obsidian2.Notice(`Skipping ${file.name}: Already in correct folder`);
@@ -669,10 +660,9 @@ var FileMovementService = class {
               file,
               targetPath,
               matchedTags,
-              hadRuleConflict,
-              true,
               "Already in correct folder" /* ALREADY_IN_PLACE */
             ));
+            console.log(logEntries);
             continue;
           }
           if (await this.app.vault.adapter.exists(targetPath)) {
@@ -684,8 +674,6 @@ var FileMovementService = class {
                 file,
                 targetPath,
                 matchedTags,
-                hadRuleConflict,
-                true,
                 "File exists at destination" /* FILE_EXISTS */
               ));
               continue;
@@ -697,8 +685,7 @@ var FileMovementService = class {
             file,
             targetPath,
             matchedTags,
-            hadRuleConflict,
-            false
+            "Moved successfully" /* MOVED */
           ));
         } else {
           this.logger(`No matching folder found for tags: ${tags.join(", ")}`);
@@ -707,8 +694,6 @@ var FileMovementService = class {
             null,
             [],
             // No matched tags
-            false,
-            true,
             "No matching rules" /* NO_MATCHING_RULES */
           ));
         }
@@ -718,8 +703,6 @@ var FileMovementService = class {
           file,
           null,
           [],
-          false,
-          true,
           "No tags" /* NO_TAGS */
         ));
       }
@@ -739,10 +722,6 @@ var FileMovementService = class {
       if (!confirmed) {
         new import_obsidian2.Notice("Operation cancelled");
         for (const entry of logEntries) {
-          if (!entry.wasSkipped) {
-            entry.wasSkipped = true;
-            entry.skipReason = "Operation cancelled" /* OPERATION_CANCELLED */;
-          }
         }
         const logPath2 = await this.loggingService.saveLogEntries(operationType, logEntries);
         this.logger(`Log saved to ${logPath2}`);
@@ -762,13 +741,11 @@ var FileMovementService = class {
           (entry) => entry.fileName === file.name && entry.sourcePath === file.path.substring(0, file.path.lastIndexOf("/")) && entry.destinationPath === targetPath.substring(0, targetPath.lastIndexOf("/"))
         );
         if (logEntry) {
-          logEntry.wasSkipped = true;
-          logEntry.skipReason = "Error during move" /* ERROR */;
         }
       }
     }
     alreadyInPlaceCount = logEntries.filter(
-      (entry) => entry.skipReason === "Already in correct folder" /* ALREADY_IN_PLACE */
+      (entry) => entry.result === "Already in correct folder" /* ALREADY_IN_PLACE */
     ).length;
     if (alreadyInPlaceCount > 0) {
       new import_obsidian2.Notice(`Moved ${successCount} files, ${alreadyInPlaceCount} already in correct location`);
