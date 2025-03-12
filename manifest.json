@@ -6,5 +6,6 @@
   "author": "Chris Howard with Windsurf", 
   "minAppVersion": "0.9.7", 
   "main": "main.js", 
-  "css": "styles.css" 
+  "css": "styles.css",
+  "license":"GNU GPLv3"
 }
