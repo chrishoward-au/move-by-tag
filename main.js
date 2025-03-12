@@ -477,7 +477,7 @@ var LoggingService = class {
   /**
    * Create a log entry for a file movement
    */
-  createLogEntry(file, destinationPath, tags, result = "Moved successfully" /* MOVED */) {
+  createLogEntry(file, destinationPath, tags, result = "Moved by rule" /* MOVED */, resultCode) {
     const getDirectoryPath = (path) => {
       const lastSlashIndex = path.lastIndexOf("/");
       const dirPath = lastSlashIndex >= 0 ? path.substring(0, lastSlashIndex) : "";
@@ -494,7 +494,8 @@ var LoggingService = class {
       sourcePath: sourceDir,
       destinationPath: destDir,
       tags,
-      result
+      result,
+      resultCode
     };
   }
   /**
@@ -503,13 +504,14 @@ var LoggingService = class {
   getStatusIndicator(entry) {
     switch (entry.result) {
       case "" /* NONE */:
-      case "Moved successfully" /* MOVED */:
+      case "Moved by rule" /* MOVED */:
+      case "Resolved move" /* RESOLVED_MOVE */:
         return "\u{1F7E2}" /* SUCCESS */;
       case "Already in correct folder" /* ALREADY_IN_PLACE */:
       case "No tags" /* NO_TAGS */:
       case "No matching rules" /* NO_MATCHING_RULES */:
         return "\u{1F7E0}" /* WARNING */;
-      case "Rule conflict" /* RULE_CONFLICT */:
+      case "Rule conflict - user skipped" /* RULE_CONFLICT */:
       case "File exists at destination" /* FILE_EXISTS */:
       case "Operation cancelled" /* OPERATION_CANCELLED */:
       case "Error during move" /* ERROR */:
@@ -540,6 +542,7 @@ var LoggingService = class {
 `;
     mdContent += `| --------- | ----------- | ---------------- | --------------- | ------ | ----- |
 `;
+    console.log(entries);
     for (const entry of entries) {
       const status = this.getStatusIndicator(entry);
       const reason = entry.result;
@@ -547,11 +550,17 @@ var LoggingService = class {
       mdContent += `| ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${formattedTags} | ${status} | ${reason} |
 `;
     }
+    const movedCount = entries.filter((e) => e.resultCode === "MVD").length;
+    const skippedCount = entries.filter((e) => e.resultCode === "SKP").length;
     mdContent += `
 ## Summary
 
 `;
     mdContent += `- Total files processed: ${entries.length}
+`;
+    mdContent += `- Files moved: ${movedCount}
+`;
+    mdContent += `- Files skipped: ${skippedCount}
 `;
     await this.app.vault.adapter.write(fullPath, mdContent);
     return fullPath;
@@ -618,6 +627,7 @@ var FileMovementService = class {
       }
       const tags = await this.fileUtils.extractTagsFromFile(file);
       this.logger(`Found tags in ${file.path}: ${tags.join(", ") || "none"}`);
+      let moveType = "rule";
       if (tags.length > 0) {
         const matches = this.tagMappingService.getTargetFolderForTags(tags, this.settings.tagMappings);
         if (matches.length > 0) {
@@ -637,10 +647,12 @@ var FileMovementService = class {
                 file,
                 null,
                 allMatchedTags,
-                "Rule conflict" /* RULE_CONFLICT */
+                "Rule conflict - user skipped" /* RULE_CONFLICT */,
+                "SKP"
               ));
               continue;
             } else {
+              moveType = "resolved";
               const selectedMatch = matches.find((m) => m.mapping.folder === targetFolder);
               if (selectedMatch) {
                 matchedTags = selectedMatch.matchedTags;
@@ -652,7 +664,6 @@ var FileMovementService = class {
           const currentFolder = "/" + file.path.substring(0, file.path.lastIndexOf("/"));
           const normalizedCurrentFolder = currentFolder.replace(/\/+/g, "/").replace(/\/$/, "");
           const normalizedTargetFolder = targetFolder.replace(/\/+/g, "/").replace(/\/$/, "");
-          console.log(normalizedCurrentFolder, normalizedTargetFolder);
           if (normalizedCurrentFolder === normalizedTargetFolder) {
             this.logger(`File is already in the correct folder: ${targetFolder}`);
             new import_obsidian2.Notice(`Skipping ${file.name}: Already in correct folder`);
@@ -660,9 +671,9 @@ var FileMovementService = class {
               file,
               targetPath,
               matchedTags,
-              "Already in correct folder" /* ALREADY_IN_PLACE */
+              "Already in correct folder" /* ALREADY_IN_PLACE */,
+              "SKP"
             ));
-            console.log(logEntries);
             continue;
           }
           if (await this.app.vault.adapter.exists(targetPath)) {
@@ -674,7 +685,8 @@ var FileMovementService = class {
                 file,
                 targetPath,
                 matchedTags,
-                "File exists at destination" /* FILE_EXISTS */
+                "File exists at destination" /* FILE_EXISTS */,
+                "SKP"
               ));
               continue;
             }
@@ -685,7 +697,8 @@ var FileMovementService = class {
             file,
             targetPath,
             matchedTags,
-            "Moved successfully" /* MOVED */
+            moveType === "resolved" ? "Resolved move" /* RESOLVED_MOVE */ : "Moved by rule" /* MOVED */,
+            "MVD"
           ));
         } else {
           this.logger(`No matching folder found for tags: ${tags.join(", ")}`);
@@ -694,7 +707,8 @@ var FileMovementService = class {
             null,
             [],
             // No matched tags
-            "No matching rules" /* NO_MATCHING_RULES */
+            "No matching rules" /* NO_MATCHING_RULES */,
+            "SKP"
           ));
         }
       } else {
@@ -703,7 +717,8 @@ var FileMovementService = class {
           file,
           null,
           [],
-          "No tags" /* NO_TAGS */
+          "No tags" /* NO_TAGS */,
+          "SKP"
         ));
       }
     }

@@ -73,6 +73,7 @@ export class FileMovementService {
       const tags = await this.fileUtils.extractTagsFromFile(file);
       this.logger(`Found tags in ${file.path}: ${tags.join(', ') || 'none'}`);
 
+      let moveType ="rule";
       if (tags.length > 0) {
         const matches = this.tagMappingService.getTargetFolderForTags(tags, this.settings.tagMappings);
 
@@ -99,14 +100,17 @@ export class FileMovementService {
                 file,
                 null,
                 allMatchedTags,
-                ResultDescription.RULE_CONFLICT
+                ResultDescription.RULE_CONFLICT,
+                "SKP"
               ));
               
               continue;
             } else {
+              moveType = 'resolved';
               // Find which match was selected to get the matched tags
               const selectedMatch = matches.find(m => m.mapping.folder === targetFolder);
               if (selectedMatch) {
+
                 matchedTags = selectedMatch.matchedTags;
               }
             }
@@ -120,8 +124,6 @@ export class FileMovementService {
           const normalizedCurrentFolder = currentFolder.replace(/\/+/g, '/').replace(/\/$/, '');
           const normalizedTargetFolder = targetFolder.replace(/\/+/g, '/').replace(/\/$/, '');
           
-          console.log(normalizedCurrentFolder, normalizedTargetFolder);
-
           if (normalizedCurrentFolder === normalizedTargetFolder) {
             this.logger(`File is already in the correct folder: ${targetFolder}`);
             new Notice(`Skipping ${file.name}: Already in correct folder`);
@@ -131,9 +133,9 @@ export class FileMovementService {
               file,
               targetPath,
               matchedTags,
-              ResultDescription.ALREADY_IN_PLACE
+              ResultDescription.ALREADY_IN_PLACE,
+              "SKP"
             ));
-            console.log(logEntries);
             continue;
           }
 
@@ -150,7 +152,8 @@ export class FileMovementService {
                 file,
                 targetPath,
                 matchedTags,
-                ResultDescription.FILE_EXISTS
+                ResultDescription.FILE_EXISTS,
+                "SKP"
               ));
               
               continue;
@@ -165,7 +168,8 @@ export class FileMovementService {
             file,
             targetPath,
             matchedTags,
-            ResultDescription.MOVED
+            (moveType === 'resolved'?ResultDescription.RESOLVED_MOVE : ResultDescription.MOVED),
+            "MVD"
           ));
         } else {
           this.logger(`No matching folder found for tags: ${tags.join(', ')}`);
@@ -175,7 +179,9 @@ export class FileMovementService {
             file,
             null,
             [], // No matched tags
-            ResultDescription.NO_MATCHING_RULES
+            ResultDescription.NO_MATCHING_RULES,
+            "SKP"
+
           ));
         }
       } else {
@@ -186,7 +192,8 @@ export class FileMovementService {
           file,
           null,
           [],
-          ResultDescription.NO_TAGS
+          ResultDescription.NO_TAGS,
+          "SKP"
         ));
       }
     }

@@ -31,7 +31,8 @@ export enum ResultDescription {
   ALREADY_IN_PLACE = 'Already in correct folder',
   OPERATION_CANCELLED = 'Operation cancelled',
   ERROR = 'Error during move',
-  MOVED = 'Moved successfully'
+  MOVED = 'Moved by rule',
+  RESOLVED_MOVE = 'Resolved move'
 }
 
 /**
@@ -44,6 +45,7 @@ export interface LogEntry {
   destinationPath: string;
   tags: string[];
   result: string;
+  resultCode:string;
 }
 
 /**
@@ -111,7 +113,8 @@ export class LoggingService {
     file: TFile,
     destinationPath: string | null,
     tags: string[],
-    result: ResultDescription = ResultDescription.MOVED
+    result: ResultDescription = ResultDescription.MOVED,
+    resultCode: string
   ): LogEntry {
 
     // Get directory path without filename
@@ -137,7 +140,8 @@ export class LoggingService {
       sourcePath: sourceDir,
       destinationPath: destDir,
       tags,
-      result
+      result,
+      resultCode
     };
   }
   
@@ -150,6 +154,7 @@ export class LoggingService {
     switch (entry.result) {
       case ResultDescription.NONE:
       case ResultDescription.MOVED:
+      case ResultDescription.RESOLVED_MOVE:
         return StatusIndicator.SUCCESS;
 
       case ResultDescription.ALREADY_IN_PLACE:
@@ -196,24 +201,26 @@ export class LoggingService {
     // Create table header
     mdContent += `| File Name | Source Path | Destination Path | Triggering Tags | Status | Notes |\n`;
     mdContent += `| --------- | ----------- | ---------------- | --------------- | ------ | ----- |\n`;
-    
+    console.log(entries);
     // Add entries
+
     for (const entry of entries) {
       const status = this.getStatusIndicator(entry);
       const reason = entry.result;
       const formattedTags = this.formatTags(entry.tags);
-      
+        
       mdContent += `| ${this.escapeMarkdownField(entry.fileName)} | ${this.escapeMarkdownField(entry.sourcePath)} | ${this.escapeMarkdownField(entry.destinationPath)} | ${formattedTags} | ${status} | ${reason} |\n`;
     }
     
     // Add summary
-    // const movedCount = entries.filter(e => !e.wasSkipped).length;
-    // const skippedCount = entries.filter(e => e.wasSkipped).length;
+    const movedCount = entries.filter(e => e.resultCode==='MVD').length;
+    const skippedCount = entries.filter(e => e.resultCode==='SKP').length;
+
     
     mdContent += `\n## Summary\n\n`;
     mdContent += `- Total files processed: ${entries.length}\n`;
-    // mdContent += `- Files moved: ${movedCount}\n`;
-    // mdContent += `- Files skipped: ${skippedCount}\n`;
+    mdContent += `- Files moved: ${movedCount}\n`;
+    mdContent += `- Files skipped: ${skippedCount}\n`;
     
     // Write to file
     await this.app.vault.adapter.write(fullPath, mdContent);
