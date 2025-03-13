@@ -13,8 +13,8 @@ export class MoveOptionsModal extends Modal {
   private plugin: any; // Reference to the plugin for saving settings
 
   constructor(
-    app: App, 
-    settings: MoveByTagSettings, 
+    app: App,
+    settings: MoveByTagSettings,
     logger: (message: string) => void,
     plugin: any
   ) {
@@ -23,7 +23,7 @@ export class MoveOptionsModal extends Modal {
     this.logger = logger;
     this.plugin = plugin;
     this.activeFile = this.app.workspace.getActiveFile();
-    
+
     // Initialize services
     const fileUtils = new FileUtils(this.app);
     const tagMappingService = new TagMappingService();
@@ -38,29 +38,29 @@ export class MoveOptionsModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    
+
     // Set a title for the modal
     this.titleEl.setText('Move by Tag Options');
-    
+
     // Create a container with some styling
     const container = contentEl.createDiv({ cls: 'move-options-container' });
     container.style.padding = '20px';
     container.style.maxWidth = '500px';
-    
+
     // Add description
-    const description = container.createEl('p', { 
+    const description = container.createEl('p', {
       text: 'Choose how you want to move files based on tags:',
       cls: 'move-options-description'
     });
     description.style.marginBottom = '20px';
     description.style.color = 'var(--text-normal)';
-    
+
     // Create button container
     const buttonContainer = container.createDiv({ cls: 'move-options-buttons' });
     buttonContainer.style.display = 'flex';
     buttonContainer.style.flexDirection = 'column';
     buttonContainer.style.gap = '10px';
-    
+
     // Add buttons for each option
     this.createOptionButton(
       buttonContainer,
@@ -74,7 +74,7 @@ export class MoveOptionsModal extends Modal {
       },
       !this.activeFile // Disabled if no active file
     );
-    
+
     this.createOptionButton(
       buttonContainer,
       'Move Files in Current Folder',
@@ -87,7 +87,7 @@ export class MoveOptionsModal extends Modal {
       },
       !this.activeFile // Disabled if no active file
     );
-    
+
     this.createOptionButton(
       buttonContainer,
       'Move Files in All Folders',
@@ -97,50 +97,69 @@ export class MoveOptionsModal extends Modal {
         await this.fileMovementService.moveFiles(MoveScope.ALL_FOLDERS);
       }
     );
-    
-    // Add a separator
-    const separator = container.createEl('hr');
-    separator.style.margin = '20px 0';
-    separator.style.border = 'none';
-    separator.style.borderTop = '1px solid var(--background-modifier-border)';
-    
-    // Add a section title for tag management
-    const tagManagementTitle = container.createEl('h4', {
-      text: 'Tag Rule Management'
-    });
-    tagManagementTitle.style.marginBottom = '10px';
-    
-    // Create a button container for tag management
-    const tagManagementContainer = container.createDiv({ cls: 'tag-management-buttons' });
-    tagManagementContainer.style.display = 'flex';
-    tagManagementContainer.style.flexDirection = 'column';
-    tagManagementContainer.style.gap = '10px';
-    
+
+    // // Add a separator
+    // const separator = container.createEl('hr');
+    // separator.style.margin = '20px 0';
+    // separator.style.border = 'none';
+    // separator.style.borderTop = '1px solid var(--background-modifier-border)';
+
+    // // Add a section title for tag management
+    // const tagManagementTitle = container.createEl('h4', {
+    //   text: 'Tag Rule Management'
+    // });
+    // tagManagementTitle.style.marginBottom = '10px';
+
+    // // Create a button container for tag management
+    // const tagManagementContainer = container.createDiv({ cls: 'tag-management-buttons' });
+    // tagManagementContainer.style.display = 'flex';
+    // tagManagementContainer.style.flexDirection = 'column';
+    // tagManagementContainer.style.gap = '10px';
+
     // Add button to create a new tag rule
-    this.createOptionButton(
-      tagManagementContainer,
-      'Create Tag Rule from Current File',
-      'Create a new tag mapping rule based on the tags in the current file',
-      () => {
+    // this.createOptionButton(
+    //   tagManagementContainer,
+    //   'Create Tag Rule from Current File',
+    //   'Create a new tag mapping rule based on the tags in the current file',
+    //   () => {
+    //     if (this.activeFile) {
+    //       this.close();
+    //       this.createRuleFromFile(this.activeFile);
+    //     }
+    //   },
+    //   !this.activeFile // Disabled if no active file
+    // );
+
+    const buttonContainerActions =container.createDiv();
+    buttonContainerActions.style.marginTop = '20px';
+    buttonContainerActions.style.display = 'flex';
+    buttonContainerActions.style.justifyContent = 'flex-end';
+    buttonContainerActions.style.gap='10px';
+
+ // Add New Rule button
+    if (this.activeFile) {
+ 
+      const newRuleButton = buttonContainerActions.createEl('button', {
+        text: 'New Rule',
+        cls: 'mod-cta'
+      });
+
+      newRuleButton.addEventListener('click', () => {
         if (this.activeFile) {
           this.close();
           this.createRuleFromFile(this.activeFile);
         }
-      },
-      !this.activeFile // Disabled if no active file
-    );
-    
+      });
+
+    }
+
     // Add cancel button
-    const cancelButtonContainer = container.createDiv();
-    cancelButtonContainer.style.marginTop = '20px';
-    cancelButtonContainer.style.display = 'flex';
-    cancelButtonContainer.style.justifyContent = 'flex-end';
-    
-    const cancelButton = cancelButtonContainer.createEl('button', {
+ 
+    const cancelButton = buttonContainerActions.createEl('button', {
       text: 'Cancel',
       cls: 'mod-warning'
     });
-    
+
     cancelButton.addEventListener('click', () => {
       this.close();
     });
@@ -171,9 +190,9 @@ export class MoveOptionsModal extends Modal {
    * Create an option button with description
    */
   private createOptionButton(
-    container: HTMLElement, 
-    label: string, 
-    description: string, 
+    container: HTMLElement,
+    label: string,
+    description: string,
     onClick: () => void,
     disabled: boolean = false
   ) {
@@ -183,7 +202,7 @@ export class MoveOptionsModal extends Modal {
     buttonWrapper.style.border = '1px solid var(--background-modifier-border)';
     buttonWrapper.style.borderRadius = '4px';
     buttonWrapper.style.padding = '10px';
-    
+
     if (!disabled) {
       buttonWrapper.style.cursor = 'pointer';
       buttonWrapper.style.transition = 'background-color 0.2s ease';
@@ -197,17 +216,17 @@ export class MoveOptionsModal extends Modal {
     } else {
       buttonWrapper.style.opacity = '0.5';
       buttonWrapper.style.cursor = 'not-allowed';
-      buttonWrapper.title ='Requires an open file';
+      buttonWrapper.title = 'Requires an open file';
     }
-    
-    const labelEl = buttonWrapper.createEl('div', { 
+
+    const labelEl = buttonWrapper.createEl('div', {
       text: label,
       cls: 'move-option-label'
     });
     labelEl.style.fontWeight = 'bold';
     labelEl.style.marginBottom = '5px';
-    
-    const descriptionEl = buttonWrapper.createEl('div', { 
+
+    const descriptionEl = buttonWrapper.createEl('div', {
       text: description,
       cls: 'move-option-description'
     });

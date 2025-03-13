@@ -1351,36 +1351,24 @@ var MoveOptionsModal = class extends import_obsidian5.Modal {
         await this.fileMovementService.moveFiles("all_folders" /* ALL_FOLDERS */);
       }
     );
-    const separator = container.createEl("hr");
-    separator.style.margin = "20px 0";
-    separator.style.border = "none";
-    separator.style.borderTop = "1px solid var(--background-modifier-border)";
-    const tagManagementTitle = container.createEl("h4", {
-      text: "Tag Rule Management"
-    });
-    tagManagementTitle.style.marginBottom = "10px";
-    const tagManagementContainer = container.createDiv({ cls: "tag-management-buttons" });
-    tagManagementContainer.style.display = "flex";
-    tagManagementContainer.style.flexDirection = "column";
-    tagManagementContainer.style.gap = "10px";
-    this.createOptionButton(
-      tagManagementContainer,
-      "Create Tag Rule from Current File",
-      "Create a new tag mapping rule based on the tags in the current file",
-      () => {
+    const buttonContainerActions = container.createDiv();
+    buttonContainerActions.style.marginTop = "20px";
+    buttonContainerActions.style.display = "flex";
+    buttonContainerActions.style.justifyContent = "flex-end";
+    buttonContainerActions.style.gap = "10px";
+    if (this.activeFile) {
+      const newRuleButton = buttonContainerActions.createEl("button", {
+        text: "New Rule",
+        cls: "mod-cta"
+      });
+      newRuleButton.addEventListener("click", () => {
         if (this.activeFile) {
           this.close();
           this.createRuleFromFile(this.activeFile);
         }
-      },
-      !this.activeFile
-      // Disabled if no active file
-    );
-    const cancelButtonContainer = container.createDiv();
-    cancelButtonContainer.style.marginTop = "20px";
-    cancelButtonContainer.style.display = "flex";
-    cancelButtonContainer.style.justifyContent = "flex-end";
-    const cancelButton = cancelButtonContainer.createEl("button", {
+      });
+    }
+    const cancelButton = buttonContainerActions.createEl("button", {
       text: "Cancel",
       cls: "mod-warning"
     });
