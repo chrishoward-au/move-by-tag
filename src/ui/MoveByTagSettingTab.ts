@@ -109,7 +109,7 @@ export class MoveByTagSettingTab extends PluginSettingTab {
       .addButton(button => button
         .setButtonText('Add New Mapping')
         .setCta() // Make it stand out as the primary action
-        .onClick(() => this.showNewMappingModal()));
+        .onClick(() => this.showAddMappingModal()));
 
     // Existing Mappings
     const mappingsContainer = containerEl.createDiv('tag-mappings-container');
@@ -139,12 +139,16 @@ export class MoveByTagSettingTab extends PluginSettingTab {
     }
   }
 
-  private async showNewMappingModal(): Promise<void> {
+  /** 
+  * New Mapping modal
+  **/
+  private showAddMappingModal(): void {
     const modal = new Modal(this.app);
-    modal.titleEl.setText('Create New Tag Mapping');
+    modal.titleEl.setText('Add Tag Mapping');
 
     const contentEl = modal.contentEl;
     let tagsInput: TextComponent;
+    let folderInput: TextComponent;
 
     // Tags input
     new Setting(contentEl)
@@ -156,7 +160,7 @@ export class MoveByTagSettingTab extends PluginSettingTab {
       });
 
     // Folder input for add/edit tag mapping
-    this.createFolderInputSetting(contentEl, 'folder/subfolder', 'Destination Folder');
+    folderInput = this.createFolderInputSetting(contentEl, 'folder/subfolder', 'Destination Folder');
 
     // Buttons
     new Setting(contentEl)
@@ -168,7 +172,7 @@ export class MoveByTagSettingTab extends PluginSettingTab {
         .setCta()
         .onClick(async () => {
           const tagsValue = tagsInput.getValue().trim();
-          const folder = this.createFolderInputSetting(contentEl, 'folder/subfolder', 'Destination Folder').getValue().trim();
+          const folder = folderInput.getValue().trim();
 
           if (!tagsValue || !folder) {
             new Notice('Both tags and folder are required');
@@ -220,6 +224,7 @@ export class MoveByTagSettingTab extends PluginSettingTab {
 
     const contentEl = modal.contentEl;
     let tagsInput: TextComponent;
+    let folderInput: TextComponent;
 
     // Tags input
     new Setting(contentEl)
@@ -231,7 +236,8 @@ export class MoveByTagSettingTab extends PluginSettingTab {
       });
 
     // Folder input with dropdown
-    this.createFolderInputSetting(contentEl, 'folder/subfolder', 'Destination Folder').setValue(mapping.folder);
+    folderInput = this.createFolderInputSetting(contentEl, 'folder/subfolder', 'Destination Folder');
+    folderInput.setValue(mapping.folder);
 
     // Buttons
     new Setting(contentEl)
@@ -255,7 +261,7 @@ export class MoveByTagSettingTab extends PluginSettingTab {
         .setCta()
         .onClick(async () => {
           const tagsValue = tagsInput.getValue().trim();
-          const folder = this.createFolderInputSetting(contentEl, 'folder/subfolder', 'Destination Folder').getValue().trim();
+          const folder = folderInput.getValue().trim();
 
           if (!tagsValue || !folder) {
             new Notice('Both tags and folder are required');

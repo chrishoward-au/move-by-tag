@@ -235,7 +235,7 @@ var MoveByTagSettingTab = class extends import_obsidian.PluginSettingTab {
       text: "Define where files should be moved based on their tags.",
       cls: "setting-item-description"
     });
-    new import_obsidian.Setting(containerEl).addButton((button) => button.setButtonText("Add New Mapping").setCta().onClick(() => this.showNewMappingModal()));
+    new import_obsidian.Setting(containerEl).addButton((button) => button.setButtonText("Add New Mapping").setCta().onClick(() => this.showAddMappingModal()));
     const mappingsContainer = containerEl.createDiv("tag-mappings-container");
     if (this.settings.tagMappings.length === 0) {
       mappingsContainer.createEl("p", {
@@ -251,19 +251,23 @@ var MoveByTagSettingTab = class extends import_obsidian.PluginSettingTab {
       }));
     }
   }
-  async showNewMappingModal() {
+  /** 
+  * New Mapping modal
+  **/
+  showAddMappingModal() {
     const modal = new import_obsidian.Modal(this.app);
-    modal.titleEl.setText("Create New Tag Mapping");
+    modal.titleEl.setText("Add Tag Mapping");
     const contentEl = modal.contentEl;
     let tagsInput;
+    let folderInput;
     new import_obsidian.Setting(contentEl).setName("Tags").setDesc("Enter tags without # symbol, separated by commas. All tags must be present for the rule to apply.").addText((text) => {
       tagsInput = text;
       text.setPlaceholder("tag1, tag2, tag3");
     });
-    this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder");
+    folderInput = this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder");
     new import_obsidian.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => modal.close())).addButton((button) => button.setButtonText("Add").setCta().onClick(async () => {
       const tagsValue = tagsInput.getValue().trim();
-      const folder = this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder").getValue().trim();
+      const folder = folderInput.getValue().trim();
       if (!tagsValue || !folder) {
         new import_obsidian.Notice("Both tags and folder are required");
         return;
@@ -303,11 +307,13 @@ var MoveByTagSettingTab = class extends import_obsidian.PluginSettingTab {
     modal.titleEl.setText("Edit Tag Mapping");
     const contentEl = modal.contentEl;
     let tagsInput;
+    let folderInput;
     new import_obsidian.Setting(contentEl).setName("Tags").setDesc("Enter tags without # symbol, separated by commas. All tags must be present for the rule to apply.").addText((text) => {
       tagsInput = text;
       text.setValue(mapping.tags.join(", "));
     });
-    this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder").setValue(mapping.folder);
+    folderInput = this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder");
+    folderInput.setValue(mapping.folder);
     new import_obsidian.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => modal.close())).addButton((button) => button.setButtonText("Delete").setWarning().onClick(async () => {
       if (await this.showDeleteConfirmation(mapping)) {
         this.settings.tagMappings = this.settings.tagMappings.filter((m) => m.id !== mapping.id);
@@ -317,7 +323,7 @@ var MoveByTagSettingTab = class extends import_obsidian.PluginSettingTab {
       }
     })).addButton((button) => button.setButtonText("Save").setCta().onClick(async () => {
       const tagsValue = tagsInput.getValue().trim();
-      const folder = this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder").getValue().trim();
+      const folder = folderInput.getValue().trim();
       if (!tagsValue || !folder) {
         new import_obsidian.Notice("Both tags and folder are required");
         return;
