@@ -293,9 +293,6 @@ var TagMappingModal = class extends import_obsidian.Modal {
       }
     });
     folderInput = this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder");
-    if (this.activeFile && this.activeFile.parent) {
-      folderInput.setValue(this.activeFile.parent.path);
-    }
     new import_obsidian.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => this.close())).addButton((button) => button.setButtonText("Add").setCta().onClick(async () => {
       const tagsValue = tagsInput.getValue().trim();
       const folder = folderInput.getValue().trim();
@@ -1363,7 +1360,6 @@ var MoveOptionsModal = class extends import_obsidian5.Modal {
       });
       newRuleButton.addEventListener("click", () => {
         if (this.activeFile) {
-          this.close();
           this.createRuleFromFile(this.activeFile);
         }
       });
@@ -1408,7 +1404,7 @@ var MoveOptionsModal = class extends import_obsidian5.Modal {
       buttonWrapper.style.cursor = "pointer";
       buttonWrapper.style.transition = "background-color 0.2s ease";
       buttonWrapper.addEventListener("mouseover", () => {
-        buttonWrapper.style.backgroundColor = "var(--background-secondary-alt)";
+        buttonWrapper.style.backgroundColor = "var(--background-modifier-hover)";
       });
       buttonWrapper.addEventListener("mouseout", () => {
         buttonWrapper.style.backgroundColor = "";

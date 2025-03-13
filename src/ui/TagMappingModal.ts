@@ -104,9 +104,9 @@ export class TagMappingModal extends Modal {
     folderInput = this.createFolderInputSetting(contentEl, 'folder/subfolder', 'Destination Folder');
 
     // If we have an active file, suggest its parent folder
-    if (this.activeFile && this.activeFile.parent) {
-      folderInput.setValue(this.activeFile.parent.path);
-    }
+    // if (this.activeFile && this.activeFile.parent) {
+    //   folderInput.setValue(this.activeFile.parent.path);
+    // }
 
     // Buttons
     new Setting(contentEl)

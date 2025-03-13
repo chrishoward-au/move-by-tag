@@ -60,7 +60,7 @@ export class MoveOptionsModal extends Modal {
     buttonContainer.style.display = 'flex';
     buttonContainer.style.flexDirection = 'column';
     buttonContainer.style.gap = '10px';
-
+  
     // Add buttons for each option
     this.createOptionButton(
       buttonContainer,
@@ -98,37 +98,6 @@ export class MoveOptionsModal extends Modal {
       }
     );
 
-    // // Add a separator
-    // const separator = container.createEl('hr');
-    // separator.style.margin = '20px 0';
-    // separator.style.border = 'none';
-    // separator.style.borderTop = '1px solid var(--background-modifier-border)';
-
-    // // Add a section title for tag management
-    // const tagManagementTitle = container.createEl('h4', {
-    //   text: 'Tag Rule Management'
-    // });
-    // tagManagementTitle.style.marginBottom = '10px';
-
-    // // Create a button container for tag management
-    // const tagManagementContainer = container.createDiv({ cls: 'tag-management-buttons' });
-    // tagManagementContainer.style.display = 'flex';
-    // tagManagementContainer.style.flexDirection = 'column';
-    // tagManagementContainer.style.gap = '10px';
-
-    // Add button to create a new tag rule
-    // this.createOptionButton(
-    //   tagManagementContainer,
-    //   'Create Tag Rule from Current File',
-    //   'Create a new tag mapping rule based on the tags in the current file',
-    //   () => {
-    //     if (this.activeFile) {
-    //       this.close();
-    //       this.createRuleFromFile(this.activeFile);
-    //     }
-    //   },
-    //   !this.activeFile // Disabled if no active file
-    // );
 
     const buttonContainerActions =container.createDiv();
     buttonContainerActions.style.marginTop = '20px';
@@ -146,7 +115,6 @@ export class MoveOptionsModal extends Modal {
 
       newRuleButton.addEventListener('click', () => {
         if (this.activeFile) {
-          this.close();
           this.createRuleFromFile(this.activeFile);
         }
       });
@@ -207,7 +175,7 @@ export class MoveOptionsModal extends Modal {
       buttonWrapper.style.cursor = 'pointer';
       buttonWrapper.style.transition = 'background-color 0.2s ease';
       buttonWrapper.addEventListener('mouseover', () => {
-        buttonWrapper.style.backgroundColor = 'var(--background-secondary-alt)';
+        buttonWrapper.style.backgroundColor = 'var(--background-modifier-hover)';
       });
       buttonWrapper.addEventListener('mouseout', () => {
         buttonWrapper.style.backgroundColor = '';
