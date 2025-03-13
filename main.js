@@ -1283,10 +1283,12 @@ var InfoDialog = class extends import_obsidian4.Modal {
 // src/ui/MoveOptionsModal.ts
 var import_obsidian5 = require("obsidian");
 var MoveOptionsModal = class extends import_obsidian5.Modal {
-  constructor(app, settings, logger) {
+  // Reference to the plugin for saving settings
+  constructor(app, settings, logger, plugin) {
     super(app);
     this.settings = settings;
     this.logger = logger;
+    this.plugin = plugin;
     this.activeFile = this.app.workspace.getActiveFile();
     const fileUtils = new FileUtils(this.app);
     const tagMappingService = new TagMappingService();
@@ -1349,6 +1351,31 @@ var MoveOptionsModal = class extends import_obsidian5.Modal {
         await this.fileMovementService.moveFiles("all_folders" /* ALL_FOLDERS */);
       }
     );
+    const separator = container.createEl("hr");
+    separator.style.margin = "20px 0";
+    separator.style.border = "none";
+    separator.style.borderTop = "1px solid var(--background-modifier-border)";
+    const tagManagementTitle = container.createEl("h4", {
+      text: "Tag Rule Management"
+    });
+    tagManagementTitle.style.marginBottom = "10px";
+    const tagManagementContainer = container.createDiv({ cls: "tag-management-buttons" });
+    tagManagementContainer.style.display = "flex";
+    tagManagementContainer.style.flexDirection = "column";
+    tagManagementContainer.style.gap = "10px";
+    this.createOptionButton(
+      tagManagementContainer,
+      "Create Tag Rule from Current File",
+      "Create a new tag mapping rule based on the tags in the current file",
+      () => {
+        if (this.activeFile) {
+          this.close();
+          this.createRuleFromFile(this.activeFile);
+        }
+      },
+      !this.activeFile
+      // Disabled if no active file
+    );
     const cancelButtonContainer = container.createDiv();
     cancelButtonContainer.style.marginTop = "20px";
     cancelButtonContainer.style.display = "flex";
@@ -1360,6 +1387,24 @@ var MoveOptionsModal = class extends import_obsidian5.Modal {
     cancelButton.addEventListener("click", () => {
       this.close();
     });
+  }
+  /**
+   * Create a tag rule from the current file
+   */
+  async createRuleFromFile(file) {
+    const saveSettings = async () => {
+      await this.plugin.saveData(this.settings);
+    };
+    const modal = new TagMappingModal(
+      this.app,
+      this.settings,
+      saveSettings,
+      () => {
+        this.logger(`Tag rule created for file: ${file.path}`);
+      },
+      file
+    );
+    modal.showAddMappingModal();
   }
   /**
    * Create an option button with description
@@ -1542,7 +1587,7 @@ Tags: ${tags.map((t) => "#" + t).join(", ") || "None"}
       id: "move-options",
       name: "Show Move Options",
       callback: () => {
-        new MoveOptionsModal(this.app, this.settings, this.logger).open();
+        new MoveOptionsModal(this.app, this.settings, this.logger, this.plugin).open();
       }
     });
   }

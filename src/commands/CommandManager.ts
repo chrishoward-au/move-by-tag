@@ -169,7 +169,7 @@ export class CommandManager {
       id: 'move-options',
       name: 'Show Move Options',
       callback: () => {
-        new MoveOptionsModal(this.app, this.settings, this.logger).open();
+        new MoveOptionsModal(this.app, this.settings, this.logger, this.plugin).open();
       }
     });
   }

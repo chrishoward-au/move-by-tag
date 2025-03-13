@@ -3,21 +3,25 @@ import { FileMovementService } from '../services/FileMovementService';
 import { MoveScope, MoveByTagSettings } from '../models/types';
 import { FileUtils } from '../utils/FileUtils';
 import { TagMappingService } from '../services/TagMappingService';
+import { TagMappingModal } from './TagMappingModal';
 
 export class MoveOptionsModal extends Modal {
   private settings: MoveByTagSettings;
   private logger: (message: string) => void;
   private fileMovementService: FileMovementService;
   private activeFile: TFile | null;
+  private plugin: any; // Reference to the plugin for saving settings
 
   constructor(
     app: App, 
     settings: MoveByTagSettings, 
-    logger: (message: string) => void
+    logger: (message: string) => void,
+    plugin: any
   ) {
     super(app);
     this.settings = settings;
     this.logger = logger;
+    this.plugin = plugin;
     this.activeFile = this.app.workspace.getActiveFile();
     
     // Initialize services
@@ -94,6 +98,38 @@ export class MoveOptionsModal extends Modal {
       }
     );
     
+    // Add a separator
+    const separator = container.createEl('hr');
+    separator.style.margin = '20px 0';
+    separator.style.border = 'none';
+    separator.style.borderTop = '1px solid var(--background-modifier-border)';
+    
+    // Add a section title for tag management
+    const tagManagementTitle = container.createEl('h4', {
+      text: 'Tag Rule Management'
+    });
+    tagManagementTitle.style.marginBottom = '10px';
+    
+    // Create a button container for tag management
+    const tagManagementContainer = container.createDiv({ cls: 'tag-management-buttons' });
+    tagManagementContainer.style.display = 'flex';
+    tagManagementContainer.style.flexDirection = 'column';
+    tagManagementContainer.style.gap = '10px';
+    
+    // Add button to create a new tag rule
+    this.createOptionButton(
+      tagManagementContainer,
+      'Create Tag Rule from Current File',
+      'Create a new tag mapping rule based on the tags in the current file',
+      () => {
+        if (this.activeFile) {
+          this.close();
+          this.createRuleFromFile(this.activeFile);
+        }
+      },
+      !this.activeFile // Disabled if no active file
+    );
+    
     // Add cancel button
     const cancelButtonContainer = container.createDiv();
     cancelButtonContainer.style.marginTop = '20px';
@@ -108,6 +144,27 @@ export class MoveOptionsModal extends Modal {
     cancelButton.addEventListener('click', () => {
       this.close();
     });
+  }
+
+  /**
+   * Create a tag rule from the current file
+   */
+  private async createRuleFromFile(file: TFile): Promise<void> {
+    const saveSettings = async () => {
+      await this.plugin.saveData(this.settings);
+    };
+
+    const modal = new TagMappingModal(
+      this.app,
+      this.settings,
+      saveSettings,
+      () => {
+        this.logger(`Tag rule created for file: ${file.path}`);
+      },
+      file
+    );
+
+    modal.showAddMappingModal();
   }
 
   /**
