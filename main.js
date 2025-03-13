@@ -27,7 +27,7 @@ __export(main_exports, {
   default: () => MoveByTag
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/models/types.ts
 var DEFAULT_SETTINGS = {
@@ -39,7 +39,7 @@ var DEFAULT_SETTINGS = {
 };
 
 // src/ui/MoveByTagSettingTab.ts
-var import_obsidian = require("obsidian");
+var import_obsidian2 = require("obsidian");
 
 // src/ui/FolderSuggestions.ts
 var FolderSuggestions = class {
@@ -175,210 +175,8 @@ var TagMappingService = class {
   }
 };
 
-// src/ui/MoveByTagSettingTab.ts
-var MoveByTagSettingTab = class extends import_obsidian.PluginSettingTab {
-  constructor(app, plugin, settings, saveSettings) {
-    super(app, plugin);
-    this.plugin = plugin;
-    this.settings = settings;
-    this.saveSettings = saveSettings;
-    this.folderSuggestions = new FolderSuggestions(app);
-    this.tagMappingService = new TagMappingService();
-  }
-  createFolderInputSetting(parentEl, placeholder, label) {
-    let textComponent = null;
-    console.log("Creating folder input setting for:", label);
-    new import_obsidian.Setting(parentEl).setName(label).addText((text) => {
-      text.setPlaceholder(placeholder);
-      text.inputEl.style.width = "300px";
-      text.inputEl.setAttribute("data-folder-input", label);
-      text.onChange(async (value) => {
-        console.log("Input changed:", value);
-        const inputEl = text.inputEl;
-        const results = await this.folderSuggestions.searchFolders(value);
-        if (document.activeElement === inputEl) {
-          this.folderSuggestions.displayFolderSuggestions(results);
-        }
-      });
-      textComponent = text;
-    });
-    if (!textComponent)
-      throw new Error("Failed to create text component");
-    return textComponent;
-  }
-  display() {
-    const { containerEl } = this;
-    containerEl.empty();
-    containerEl.createEl("h3", { text: "General Settings" });
-    new import_obsidian.Setting(containerEl).setName("Confirm Before Moving").setDesc("Show confirmation dialog before moving files").addToggle((toggle) => toggle.setValue(this.settings.confirmBeforeMove).onChange(async (value) => {
-      this.settings.confirmBeforeMove = value;
-      await this.saveSettings();
-    }));
-    new import_obsidian.Setting(containerEl).setName("Enable Logging").setDesc("Log file movements to console").addToggle((toggle) => toggle.setValue(this.settings.enableLogging).onChange(async (value) => {
-      this.settings.enableLogging = value;
-      await this.saveSettings();
-    }));
-    containerEl.createEl("h3", { text: "Excluded Folders" });
-    containerEl.createEl("p", {
-      text: "Files in these folders will not be moved. One folder path per line.",
-      cls: "setting-item-description"
-    });
-    this.createFolderInputSetting(containerEl, "Exclude folder/subfolder", "Exclude folder");
-    containerEl.createEl("h3", { text: "Specific Folders" });
-    containerEl.createEl("p", {
-      text: "Files will only be moved from these folders. One folder path per line.",
-      cls: "setting-item-description"
-    });
-    this.createFolderInputSetting(containerEl, "Specific folder/subfolder", "Specific folder");
-    containerEl.createEl("h3", { text: "Tag Mappings" });
-    containerEl.createEl("p", {
-      text: "Define where files should be moved based on their tags.",
-      cls: "setting-item-description"
-    });
-    new import_obsidian.Setting(containerEl).addButton((button) => button.setButtonText("Add New Mapping").setCta().onClick(() => this.showAddMappingModal()));
-    const mappingsContainer = containerEl.createDiv("tag-mappings-container");
-    if (this.settings.tagMappings.length === 0) {
-      mappingsContainer.createEl("p", {
-        text: 'No tag mappings defined yet. Click "Add New Mapping" to create one.',
-        cls: "setting-item-description"
-      });
-    }
-    const sortedMappings = [...this.settings.tagMappings].sort((a, b) => a.tags[0].localeCompare(b.tags[0]));
-    for (const mapping of sortedMappings) {
-      const tagDisplay = mapping.tags.map((t) => "#" + t).join(" + ");
-      new import_obsidian.Setting(mappingsContainer).setName(tagDisplay).setDesc(`Current destination: ${mapping.folder}`).addButton((button) => button.setButtonText("Edit").onClick(() => {
-        this.showEditMappingModal(mapping);
-      }));
-    }
-  }
-  /** 
-  * New Mapping modal
-  **/
-  showAddMappingModal() {
-    const modal = new import_obsidian.Modal(this.app);
-    modal.titleEl.setText("Add Tag Mapping");
-    const contentEl = modal.contentEl;
-    let tagsInput;
-    let folderInput;
-    new import_obsidian.Setting(contentEl).setName("Tags").setDesc("Enter tags without # symbol, separated by commas. All tags must be present for the rule to apply.").addText((text) => {
-      tagsInput = text;
-      text.setPlaceholder("tag1, tag2, tag3");
-    });
-    folderInput = this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder");
-    new import_obsidian.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => modal.close())).addButton((button) => button.setButtonText("Add").setCta().onClick(async () => {
-      const tagsValue = tagsInput.getValue().trim();
-      const folder = folderInput.getValue().trim();
-      if (!tagsValue || !folder) {
-        new import_obsidian.Notice("Both tags and folder are required");
-        return;
-      }
-      const tags = tagsValue.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
-      if (tags.length === 0) {
-        new import_obsidian.Notice("At least one tag is required");
-        return;
-      }
-      const tagSet = new Set(tags.map((t) => t.toLowerCase()));
-      if (this.settings.tagMappings.some(
-        (m) => m.tags.length === tags.length && m.tags.every((t) => tagSet.has(t.toLowerCase()))
-      )) {
-        new import_obsidian.Notice("This tag combination already has a mapping");
-        return;
-      }
-      const newMapping = {
-        id: this.tagMappingService.generateId(),
-        tags,
-        folder
-      };
-      this.settings.tagMappings.push(newMapping);
-      await this.saveSettings();
-      this.display();
-      modal.close();
-    }));
-    modal.onClose = () => {
-      const suggestionsContainer = document.getElementById("folder-suggestions");
-      if (suggestionsContainer) {
-        suggestionsContainer.remove();
-      }
-    };
-    modal.open();
-  }
-  async showEditMappingModal(mapping) {
-    const modal = new import_obsidian.Modal(this.app);
-    modal.titleEl.setText("Edit Tag Mapping");
-    const contentEl = modal.contentEl;
-    let tagsInput;
-    let folderInput;
-    new import_obsidian.Setting(contentEl).setName("Tags").setDesc("Enter tags without # symbol, separated by commas. All tags must be present for the rule to apply.").addText((text) => {
-      tagsInput = text;
-      text.setValue(mapping.tags.join(", "));
-    });
-    folderInput = this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder");
-    folderInput.setValue(mapping.folder);
-    new import_obsidian.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => modal.close())).addButton((button) => button.setButtonText("Delete").setWarning().onClick(async () => {
-      if (await this.showDeleteConfirmation(mapping)) {
-        this.settings.tagMappings = this.settings.tagMappings.filter((m) => m.id !== mapping.id);
-        await this.saveSettings();
-        this.display();
-        modal.close();
-      }
-    })).addButton((button) => button.setButtonText("Save").setCta().onClick(async () => {
-      const tagsValue = tagsInput.getValue().trim();
-      const folder = folderInput.getValue().trim();
-      if (!tagsValue || !folder) {
-        new import_obsidian.Notice("Both tags and folder are required");
-        return;
-      }
-      const tags = tagsValue.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
-      if (tags.length === 0) {
-        new import_obsidian.Notice("At least one tag is required");
-        return;
-      }
-      const tagSet = new Set(tags.map((t) => t.toLowerCase()));
-      if (this.settings.tagMappings.some(
-        (m) => m.id !== mapping.id && m.tags.length === tags.length && m.tags.every((t) => tagSet.has(t.toLowerCase()))
-      )) {
-        new import_obsidian.Notice("This tag combination already has a mapping");
-        return;
-      }
-      const index = this.settings.tagMappings.findIndex((m) => m.id === mapping.id);
-      if (index !== -1) {
-        this.settings.tagMappings[index] = {
-          ...mapping,
-          tags,
-          folder
-        };
-        await this.saveSettings();
-        this.display();
-        modal.close();
-      }
-    }));
-    modal.onClose = () => {
-      const suggestionsContainer = document.getElementById("folder-suggestions");
-      if (suggestionsContainer) {
-        suggestionsContainer.remove();
-      }
-    };
-    modal.open();
-  }
-  async showDeleteConfirmation(mapping) {
-    return new Promise((resolve) => {
-      const modal = new import_obsidian.Modal(this.app);
-      modal.titleEl.setText("Delete Mapping");
-      const contentEl = modal.contentEl;
-      contentEl.createEl("p", {
-        text: `Are you sure you want to delete the mapping for tags: ${mapping.tags.map((t) => "#" + t).join(" + ")}?`
-      });
-      new import_obsidian.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => {
-        modal.close();
-        resolve(false);
-      })).addButton((button) => button.setButtonText("Delete").setWarning().onClick(() => {
-        modal.close();
-        resolve(true);
-      }));
-      modal.open();
-    });
-  }
-};
+// src/ui/TagMappingModal.ts
+var import_obsidian = require("obsidian");
 
 // src/utils/FileUtils.ts
 var FileUtils = class {
@@ -433,11 +231,281 @@ var FileUtils = class {
   }
 };
 
+// src/ui/TagMappingModal.ts
+var TagMappingModal = class extends import_obsidian.Modal {
+  constructor(app, settings, saveSettings, onCloseCallback = () => {
+  }, activeFile = null) {
+    super(app);
+    this.settings = settings;
+    this.saveSettings = saveSettings;
+    this.onCloseCallback = onCloseCallback;
+    this.activeFile = activeFile;
+    this.folderSuggestions = new FolderSuggestions(app);
+    this.tagMappingService = new TagMappingService();
+    this.fileUtils = new FileUtils(app);
+  }
+  /**
+   * Create a folder input setting with autocomplete
+   */
+  createFolderInputSetting(parentEl, placeholder, label) {
+    let textComponent = null;
+    new import_obsidian.Setting(parentEl).setName(label).addText((text) => {
+      text.setPlaceholder(placeholder);
+      text.inputEl.style.width = "300px";
+      text.inputEl.setAttribute("data-folder-input", label);
+      text.onChange(async (value) => {
+        const inputEl = text.inputEl;
+        const results = await this.folderSuggestions.searchFolders(value);
+        if (document.activeElement === inputEl) {
+          this.folderSuggestions.displayFolderSuggestions(results);
+        }
+      });
+      textComponent = text;
+    });
+    if (!textComponent)
+      throw new Error("Failed to create text component");
+    return textComponent;
+  }
+  /**
+   * Show modal for adding a new tag mapping
+   */
+  async showAddMappingModal() {
+    this.titleEl.setText("Add Tag Mapping");
+    const contentEl = this.contentEl;
+    contentEl.empty();
+    let tagsInput;
+    let folderInput;
+    let initialTags = "";
+    if (this.activeFile) {
+      try {
+        const fileContent = await this.app.vault.read(this.activeFile);
+        const fileTags = this.fileUtils.extractTags(fileContent);
+        initialTags = fileTags.join(", ");
+      } catch (error) {
+        console.error("Error reading file:", error);
+      }
+    }
+    new import_obsidian.Setting(contentEl).setName("Tags").setDesc("Enter tags without # symbol, separated by commas. All tags must be present for the rule to apply.").addText((text) => {
+      tagsInput = text;
+      text.setPlaceholder("tag1, tag2, tag3");
+      if (initialTags) {
+        text.setValue(initialTags);
+      }
+    });
+    folderInput = this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder");
+    if (this.activeFile && this.activeFile.parent) {
+      folderInput.setValue(this.activeFile.parent.path);
+    }
+    new import_obsidian.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => this.close())).addButton((button) => button.setButtonText("Add").setCta().onClick(async () => {
+      const tagsValue = tagsInput.getValue().trim();
+      const folder = folderInput.getValue().trim();
+      if (!tagsValue || !folder) {
+        new import_obsidian.Notice("Both tags and folder are required");
+        return;
+      }
+      const tags = tagsValue.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+      if (tags.length === 0) {
+        new import_obsidian.Notice("At least one tag is required");
+        return;
+      }
+      const tagSet = new Set(tags.map((t) => t.toLowerCase()));
+      if (this.settings.tagMappings.some(
+        (m) => m.tags.length === tags.length && m.tags.every((t) => tagSet.has(t.toLowerCase()))
+      )) {
+        new import_obsidian.Notice("This tag combination already has a mapping");
+        return;
+      }
+      const newMapping = {
+        id: this.tagMappingService.generateId(),
+        tags,
+        folder
+      };
+      this.settings.tagMappings.push(newMapping);
+      await this.saveSettings();
+      this.close();
+    }));
+    this.open();
+  }
+  /**
+   * Show modal for editing an existing tag mapping
+   */
+  async showEditMappingModal(mapping) {
+    this.titleEl.setText("Edit Tag Mapping");
+    const contentEl = this.contentEl;
+    contentEl.empty();
+    let tagsInput;
+    let folderInput;
+    new import_obsidian.Setting(contentEl).setName("Tags").setDesc("Enter tags without # symbol, separated by commas. All tags must be present for the rule to apply.").addText((text) => {
+      tagsInput = text;
+      text.setValue(mapping.tags.join(", "));
+    });
+    folderInput = this.createFolderInputSetting(contentEl, "folder/subfolder", "Destination Folder");
+    folderInput.setValue(mapping.folder);
+    new import_obsidian.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => this.close())).addButton((button) => button.setButtonText("Delete").setWarning().onClick(async () => {
+      if (await this.showDeleteConfirmation(mapping)) {
+        this.settings.tagMappings = this.settings.tagMappings.filter((m) => m.id !== mapping.id);
+        await this.saveSettings();
+        this.close();
+      }
+    })).addButton((button) => button.setButtonText("Save").setCta().onClick(async () => {
+      const tagsValue = tagsInput.getValue().trim();
+      const folder = folderInput.getValue().trim();
+      if (!tagsValue || !folder) {
+        new import_obsidian.Notice("Both tags and folder are required");
+        return;
+      }
+      const tags = tagsValue.split(",").map((t) => t.trim()).filter((t) => t.length > 0);
+      if (tags.length === 0) {
+        new import_obsidian.Notice("At least one tag is required");
+        return;
+      }
+      const tagSet = new Set(tags.map((t) => t.toLowerCase()));
+      if (this.settings.tagMappings.some(
+        (m) => m.id !== mapping.id && m.tags.length === tags.length && m.tags.every((t) => tagSet.has(t.toLowerCase()))
+      )) {
+        new import_obsidian.Notice("This tag combination already has a mapping");
+        return;
+      }
+      const index = this.settings.tagMappings.findIndex((m) => m.id === mapping.id);
+      if (index !== -1) {
+        this.settings.tagMappings[index] = {
+          ...mapping,
+          tags,
+          folder
+        };
+        await this.saveSettings();
+        this.close();
+      }
+    }));
+    this.open();
+  }
+  /**
+   * Show confirmation dialog for deleting a mapping
+   */
+  async showDeleteConfirmation(mapping) {
+    return new Promise((resolve) => {
+      const modal = new import_obsidian.Modal(this.app);
+      modal.titleEl.setText("Delete Mapping");
+      const contentEl = modal.contentEl;
+      contentEl.createEl("p", {
+        text: `Are you sure you want to delete the mapping for tags: ${mapping.tags.map((t) => "#" + t).join(" + ")}?`
+      });
+      new import_obsidian.Setting(contentEl).addButton((button) => button.setButtonText("Cancel").onClick(() => {
+        modal.close();
+        resolve(false);
+      })).addButton((button) => button.setButtonText("Delete").setWarning().onClick(() => {
+        modal.close();
+        resolve(true);
+      }));
+      modal.open();
+    });
+  }
+  onClose() {
+    const suggestionsContainer = document.getElementById("folder-suggestions");
+    if (suggestionsContainer) {
+      suggestionsContainer.remove();
+    }
+    this.onCloseCallback();
+  }
+};
+
+// src/ui/MoveByTagSettingTab.ts
+var MoveByTagSettingTab = class extends import_obsidian2.PluginSettingTab {
+  constructor(app, plugin, settings, saveSettings) {
+    super(app, plugin);
+    this.plugin = plugin;
+    this.settings = settings;
+    this.saveSettings = saveSettings;
+    this.folderSuggestions = new FolderSuggestions(app);
+    this.tagMappingService = new TagMappingService();
+  }
+  createFolderInputSetting(parentEl, placeholder, label) {
+    let textComponent = null;
+    console.log("Creating folder input setting for:", label);
+    new import_obsidian2.Setting(parentEl).setName(label).addText((text) => {
+      text.setPlaceholder(placeholder);
+      text.inputEl.style.width = "300px";
+      text.inputEl.setAttribute("data-folder-input", label);
+      text.onChange(async (value) => {
+        console.log("Input changed:", value);
+        const inputEl = text.inputEl;
+        const results = await this.folderSuggestions.searchFolders(value);
+        if (document.activeElement === inputEl) {
+          this.folderSuggestions.displayFolderSuggestions(results);
+        }
+      });
+      textComponent = text;
+    });
+    if (!textComponent)
+      throw new Error("Failed to create text component");
+    return textComponent;
+  }
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+    containerEl.createEl("h3", { text: "General Settings" });
+    new import_obsidian2.Setting(containerEl).setName("Confirm Before Moving").setDesc("Show confirmation dialog before moving files").addToggle((toggle) => toggle.setValue(this.settings.confirmBeforeMove).onChange(async (value) => {
+      this.settings.confirmBeforeMove = value;
+      await this.saveSettings();
+    }));
+    new import_obsidian2.Setting(containerEl).setName("Enable Logging").setDesc("Log file movements to console").addToggle((toggle) => toggle.setValue(this.settings.enableLogging).onChange(async (value) => {
+      this.settings.enableLogging = value;
+      await this.saveSettings();
+    }));
+    containerEl.createEl("h3", { text: "Excluded Folders" });
+    containerEl.createEl("p", {
+      text: "Files in these folders will not be moved. One folder path per line.",
+      cls: "setting-item-description"
+    });
+    this.createFolderInputSetting(containerEl, "Exclude folder/subfolder", "Exclude folder");
+    containerEl.createEl("h3", { text: "Specific Folders" });
+    containerEl.createEl("p", {
+      text: "Files will only be moved from these folders. One folder path per line.",
+      cls: "setting-item-description"
+    });
+    this.createFolderInputSetting(containerEl, "Specific folder/subfolder", "Specific folder");
+    containerEl.createEl("h3", { text: "Tag Mappings" });
+    containerEl.createEl("p", {
+      text: "Define where files should be moved based on their tags.",
+      cls: "setting-item-description"
+    });
+    new import_obsidian2.Setting(containerEl).addButton((button) => button.setButtonText("Add New Mapping").setCta().onClick(() => {
+      const modal = new TagMappingModal(
+        this.app,
+        this.settings,
+        this.saveSettings,
+        () => this.display()
+      );
+      modal.showAddMappingModal();
+    }));
+    const mappingsContainer = containerEl.createDiv("tag-mappings-container");
+    if (this.settings.tagMappings.length === 0) {
+      mappingsContainer.createEl("p", {
+        text: 'No tag mappings defined yet. Click "Add New Mapping" to create one.',
+        cls: "setting-item-description"
+      });
+    }
+    const sortedMappings = [...this.settings.tagMappings].sort((a, b) => a.tags[0].localeCompare(b.tags[0]));
+    for (const mapping of sortedMappings) {
+      const tagDisplay = mapping.tags.map((t) => "#" + t).join(" + ");
+      new import_obsidian2.Setting(mappingsContainer).setName(tagDisplay).setDesc(`Current destination: ${mapping.folder}`).addButton((button) => button.setButtonText("Edit").onClick(() => {
+        const modal = new TagMappingModal(
+          this.app,
+          this.settings,
+          this.saveSettings,
+          () => this.display()
+        );
+        modal.showEditMappingModal(mapping);
+      }));
+    }
+  }
+};
+
 // src/ui/InfoDialog.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/services/FileMovementService.ts
-var import_obsidian2 = require("obsidian");
+var import_obsidian3 = require("obsidian");
 
 // src/services/LoggingService.ts
 var LoggingService = class {
@@ -618,7 +686,7 @@ var FileMovementService = class {
     const filesToProcess = await this.getFilesToProcess(scope, contextFile);
     if (filesToProcess.length === 0) {
       this.logger("No files to process");
-      new import_obsidian2.Notice("No files to process");
+      new import_obsidian3.Notice("No files to process");
       return { total: 0, moved: 0 };
     }
     this.logger(`Found ${filesToProcess.length} files to process`);
@@ -647,7 +715,7 @@ var FileMovementService = class {
             targetFolder = await this.showRuleConflictDialog(file, matches);
             if (!targetFolder) {
               this.logger(`User skipped file ${file.path} due to rule conflict`);
-              new import_obsidian2.Notice(`Skipped ${file.name} due to rule conflict`);
+              new import_obsidian3.Notice(`Skipped ${file.name} due to rule conflict`);
               const allMatchedTags = Array.from(new Set(matches.flatMap((m) => m.matchedTags)));
               logEntries.push(this.loggingService.createLogEntry(
                 file,
@@ -672,7 +740,7 @@ var FileMovementService = class {
           const normalizedTargetFolder = targetFolder.replace(/\/+/g, "/").replace(/\/$/, "");
           if (normalizedCurrentFolder === normalizedTargetFolder) {
             this.logger(`File is already in the correct folder: ${targetFolder}`);
-            new import_obsidian2.Notice(`Skipping ${file.name}: Already in correct folder`);
+            new import_obsidian3.Notice(`Skipping ${file.name}: Already in correct folder`);
             logEntries.push(this.loggingService.createLogEntry(
               file,
               targetPath,
@@ -686,7 +754,7 @@ var FileMovementService = class {
             const existingFile = this.app.vault.getAbstractFileByPath(targetPath);
             if (existingFile && existingFile !== file) {
               this.logger(`File already exists at target location: ${targetPath}`);
-              new import_obsidian2.Notice(`Skipping ${file.name}: File already exists in target location`);
+              new import_obsidian3.Notice(`Skipping ${file.name}: File already exists in target location`);
               logEntries.push(this.loggingService.createLogEntry(
                 file,
                 targetPath,
@@ -730,7 +798,7 @@ var FileMovementService = class {
     }
     if (movements.length === 0) {
       this.logger("No files to move - no valid tag mappings found");
-      new import_obsidian2.Notice("No files to move");
+      new import_obsidian3.Notice("No files to move");
       if (logEntries.length > 0) {
         const logPath2 = await this.loggingService.saveLogEntries(operationType, logEntries);
         this.logger(`Log saved to ${logPath2}`);
@@ -741,7 +809,7 @@ var FileMovementService = class {
     if (this.settings.confirmBeforeMove) {
       const confirmed = await this.showBatchConfirmationDialog(movements);
       if (!confirmed) {
-        new import_obsidian2.Notice("Operation cancelled");
+        new import_obsidian3.Notice("Operation cancelled");
         for (const entry of logEntries) {
         }
         const logPath2 = await this.loggingService.saveLogEntries(operationType, logEntries);
@@ -757,7 +825,7 @@ var FileMovementService = class {
         successCount++;
         this.logger(`Moved ${file.path} to ${targetPath}`);
       } catch (error) {
-        new import_obsidian2.Notice(`Failed to move ${file.name}: ${error.message}`);
+        new import_obsidian3.Notice(`Failed to move ${file.name}: ${error.message}`);
         const logEntry = logEntries.find(
           (entry) => entry.fileName === file.name && entry.sourcePath === file.path.substring(0, file.path.lastIndexOf("/")) && entry.destinationPath === targetPath.substring(0, targetPath.lastIndexOf("/"))
         );
@@ -769,9 +837,9 @@ var FileMovementService = class {
       (entry) => entry.result === "Already in correct folder" /* ALREADY_IN_PLACE */
     ).length;
     if (alreadyInPlaceCount > 0) {
-      new import_obsidian2.Notice(`Moved ${successCount} files, ${alreadyInPlaceCount} already in correct location`);
+      new import_obsidian3.Notice(`Moved ${successCount} files, ${alreadyInPlaceCount} already in correct location`);
     } else {
-      new import_obsidian2.Notice(`Successfully moved ${successCount} of ${movements.length} files`);
+      new import_obsidian3.Notice(`Successfully moved ${successCount} of ${movements.length} files`);
     }
     const logPath = await this.loggingService.saveLogEntries(operationType, logEntries);
     this.logger(`Log saved to ${logPath}`);
@@ -835,7 +903,7 @@ var FileMovementService = class {
    */
   async showConfirmationDialog(file, targetPath) {
     return new Promise((resolve) => {
-      const modal = new import_obsidian2.Modal(this.app);
+      const modal = new import_obsidian3.Modal(this.app);
       modal.titleEl.setText("Confirm File Movement");
       const { contentEl } = modal;
       contentEl.createEl("p", {
@@ -883,7 +951,7 @@ var FileMovementService = class {
    */
   async showBatchConfirmationDialog(movements) {
     return new Promise((resolve) => {
-      const modal = new import_obsidian2.Modal(this.app);
+      const modal = new import_obsidian3.Modal(this.app);
       modal.titleEl.setText("Confirm File Movements");
       const { contentEl } = modal;
       contentEl.createEl("p", {
@@ -936,7 +1004,7 @@ var FileMovementService = class {
    */
   async showRuleConflictDialog(file, matches) {
     return new Promise((resolve) => {
-      const modal = new import_obsidian2.Modal(this.app);
+      const modal = new import_obsidian3.Modal(this.app);
       modal.titleEl.setText("Multiple Rules Match");
       const { contentEl } = modal;
       contentEl.createEl("p", {
@@ -1029,7 +1097,7 @@ var FileMovementService = class {
 };
 
 // src/ui/InfoDialog.ts
-var InfoDialog = class extends import_obsidian3.Modal {
+var InfoDialog = class extends import_obsidian4.Modal {
   constructor(app, content, file, settings, logger) {
     super(app);
     this.fileMovementService = null;
@@ -1213,8 +1281,8 @@ var InfoDialog = class extends import_obsidian3.Modal {
 };
 
 // src/ui/MoveOptionsModal.ts
-var import_obsidian4 = require("obsidian");
-var MoveOptionsModal = class extends import_obsidian4.Modal {
+var import_obsidian5 = require("obsidian");
+var MoveOptionsModal = class extends import_obsidian5.Modal {
   constructor(app, settings, logger) {
     super(app);
     this.settings = settings;
@@ -1354,6 +1422,7 @@ var CommandManager = class {
     this.registerShowFileInfoCommand();
     this.registerMoveInCurrentFolderCommand();
     this.registerMoveOptionsCommand();
+    this.registerCreateRuleCommand();
   }
   /**
    * Register the Move by Tag command
@@ -1477,10 +1546,47 @@ Tags: ${tags.map((t) => "#" + t).join(", ") || "None"}
       }
     });
   }
+  /**
+   * Register the Create Rule command
+   */
+  registerCreateRuleCommand() {
+    this.plugin.addCommand({
+      id: "create-tag-rule",
+      name: "Create Tag Rule from Current File",
+      checkCallback: (checking) => {
+        const activeFile = this.app.workspace.getActiveFile();
+        if (activeFile) {
+          if (!checking) {
+            this.createRuleFromFile(activeFile);
+          }
+          return true;
+        }
+        return false;
+      }
+    });
+  }
+  /**
+   * Create a tag rule from the current file
+   */
+  async createRuleFromFile(file) {
+    const saveSettings = async () => {
+      await this.plugin.saveData(this.settings);
+    };
+    const modal = new TagMappingModal(
+      this.app,
+      this.settings,
+      saveSettings,
+      () => {
+        this.logger(`Tag rule created for file: ${file.path}`);
+      },
+      file
+    );
+    modal.showAddMappingModal();
+  }
 };
 
 // src/main.ts
-var MoveByTag = class extends import_obsidian5.Plugin {
+var MoveByTag = class extends import_obsidian6.Plugin {
   log(message) {
     if (this.settings.enableLogging) {
       console.log(`[Move by Tag] ${message}`);

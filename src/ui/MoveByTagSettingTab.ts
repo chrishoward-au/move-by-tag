@@ -2,6 +2,7 @@ import { App, Modal, Notice, Plugin, PluginSettingTab, Setting, TextComponent } 
 import { MoveByTagSettings, TagMapping } from '../models/types';
 import { FolderSuggestions } from './FolderSuggestions';
 import { TagMappingService } from '../services/TagMappingService';
+import { TagMappingModal } from './TagMappingModal';
 
 export class MoveByTagSettingTab extends PluginSettingTab {
   private folderInput: TextComponent; // Declare folderInput here
@@ -109,7 +110,15 @@ export class MoveByTagSettingTab extends PluginSettingTab {
       .addButton(button => button
         .setButtonText('Add New Mapping')
         .setCta() // Make it stand out as the primary action
-        .onClick(() => this.showAddMappingModal()));
+        .onClick(() => {
+          const modal = new TagMappingModal(
+            this.app, 
+            this.settings, 
+            this.saveSettings, 
+            () => this.display()
+          );
+          modal.showAddMappingModal();
+        }));
 
     // Existing Mappings
     const mappingsContainer = containerEl.createDiv('tag-mappings-container');
@@ -134,208 +143,14 @@ export class MoveByTagSettingTab extends PluginSettingTab {
         .addButton(button => button
           .setButtonText('Edit')
           .onClick(() => {
-            this.showEditMappingModal(mapping);
+            const modal = new TagMappingModal(
+              this.app, 
+              this.settings, 
+              this.saveSettings, 
+              () => this.display()
+            );
+            modal.showEditMappingModal(mapping);
           }));
     }
-  }
-
-  /** 
-  * New Mapping modal
-  **/
-  private showAddMappingModal(): void {
-    const modal = new Modal(this.app);
-    modal.titleEl.setText('Add Tag Mapping');
-
-    const contentEl = modal.contentEl;
-    let tagsInput: TextComponent;
-    let folderInput: TextComponent;
-
-    // Tags input
-    new Setting(contentEl)
-      .setName('Tags')
-      .setDesc('Enter tags without # symbol, separated by commas. All tags must be present for the rule to apply.')
-      .addText(text => {
-        tagsInput = text;
-        text.setPlaceholder('tag1, tag2, tag3');
-      });
-
-    // Folder input for add/edit tag mapping
-    folderInput = this.createFolderInputSetting(contentEl, 'folder/subfolder', 'Destination Folder');
-
-    // Buttons
-    new Setting(contentEl)
-      .addButton(button => button
-        .setButtonText('Cancel')
-        .onClick(() => modal.close()))
-      .addButton(button => button
-        .setButtonText('Add')
-        .setCta()
-        .onClick(async () => {
-          const tagsValue = tagsInput.getValue().trim();
-          const folder = folderInput.getValue().trim();
-
-          if (!tagsValue || !folder) {
-            new Notice('Both tags and folder are required');
-            return;
-          }
-
-          const tags = tagsValue.split(',').map(t => t.trim()).filter(t => t.length > 0);
-          if (tags.length === 0) {
-            new Notice('At least one tag is required');
-            return;
-          }
-
-          // Check for duplicate tag combinations
-          const tagSet = new Set(tags.map(t => t.toLowerCase()));
-          if (this.settings.tagMappings.some(m =>
-            m.tags.length === tags.length &&
-            m.tags.every(t => tagSet.has(t.toLowerCase()))
-          )) {
-            new Notice('This tag combination already has a mapping');
-            return;
-          }
-
-          const newMapping: TagMapping = {
-            id: this.tagMappingService.generateId(),
-            tags,
-            folder
-          };
-
-          this.settings.tagMappings.push(newMapping);
-          await this.saveSettings();
-          this.display();
-          modal.close();
-        }));
-
-    modal.onClose = () => {
-      // Clean up suggestions when modal is closed
-      const suggestionsContainer = document.getElementById('folder-suggestions');
-      if (suggestionsContainer) {
-        suggestionsContainer.remove();
-      }
-    };
-    
-    modal.open();
-  }
-
-  private async showEditMappingModal(mapping: TagMapping): Promise<void> {
-    const modal = new Modal(this.app);
-    modal.titleEl.setText('Edit Tag Mapping');
-
-    const contentEl = modal.contentEl;
-    let tagsInput: TextComponent;
-    let folderInput: TextComponent;
-
-    // Tags input
-    new Setting(contentEl)
-      .setName('Tags')
-      .setDesc('Enter tags without # symbol, separated by commas. All tags must be present for the rule to apply.')
-      .addText(text => {
-        tagsInput = text;
-        text.setValue(mapping.tags.join(', '));
-      });
-
-    // Folder input with dropdown
-    folderInput = this.createFolderInputSetting(contentEl, 'folder/subfolder', 'Destination Folder');
-    folderInput.setValue(mapping.folder);
-
-    // Buttons
-    new Setting(contentEl)
-      .addButton(button => button
-        .setButtonText('Cancel')
-        .onClick(() => modal.close()))
-      .addButton(button => button
-        .setButtonText('Delete')
-        .setWarning()
-        .onClick(async () => {
-          if (await this.showDeleteConfirmation(mapping)) {
-            this.settings.tagMappings = this.settings.tagMappings
-              .filter(m => m.id !== mapping.id);
-            await this.saveSettings();
-            this.display();
-            modal.close();
-          }
-        }))
-      .addButton(button => button
-        .setButtonText('Save')
-        .setCta()
-        .onClick(async () => {
-          const tagsValue = tagsInput.getValue().trim();
-          const folder = folderInput.getValue().trim();
-
-          if (!tagsValue || !folder) {
-            new Notice('Both tags and folder are required');
-            return;
-          }
-
-          const tags = tagsValue.split(',').map(t => t.trim()).filter(t => t.length > 0);
-          if (tags.length === 0) {
-            new Notice('At least one tag is required');
-            return;
-          }
-
-          // Check for duplicate tag combinations (excluding this mapping)
-          const tagSet = new Set(tags.map(t => t.toLowerCase()));
-          if (this.settings.tagMappings.some(m =>
-            m.id !== mapping.id &&
-            m.tags.length === tags.length &&
-            m.tags.every(t => tagSet.has(t.toLowerCase()))
-          )) {
-            new Notice('This tag combination already has a mapping');
-            return;
-          }
-
-          // Update the mapping
-          const index = this.settings.tagMappings.findIndex(m => m.id === mapping.id);
-          if (index !== -1) {
-            this.settings.tagMappings[index] = {
-              ...mapping,
-              tags,
-              folder
-            };
-            await this.saveSettings();
-            this.display();
-            modal.close();
-          }
-        }));
-
-    modal.onClose = () => {
-      // Clean up suggestions when modal is closed
-      const suggestionsContainer = document.getElementById('folder-suggestions');
-      if (suggestionsContainer) {
-        suggestionsContainer.remove();
-      }
-    };
-    
-    modal.open();
-  }
-
-  private async showDeleteConfirmation(mapping: TagMapping): Promise<boolean> {
-    return new Promise((resolve) => {
-      const modal = new Modal(this.app);
-      modal.titleEl.setText('Delete Mapping');
-      
-      const contentEl = modal.contentEl;
-      contentEl.createEl('p', {
-        text: `Are you sure you want to delete the mapping for tags: ${mapping.tags.map(t => '#' + t).join(' + ')}?`
-      });
-      
-      new Setting(contentEl)
-        .addButton(button => button
-          .setButtonText('Cancel')
-          .onClick(() => {
-            modal.close();
-            resolve(false);
-          }))
-        .addButton(button => button
-          .setButtonText('Delete')
-          .setWarning()
-          .onClick(() => {
-            modal.close();
-            resolve(true);
-          }));
-      
-      modal.open();
-    });
   }
 }

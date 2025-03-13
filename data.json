@@ -21,12 +21,20 @@
         "misc"
       ],
       "folder": "/Writing"
+    },
+    {
+      "id": "m871yh7m6tqqje08tcc",
+      "tags": [
+        "articles",
+        "misc"
+      ],
+      "folder": "/Writing/Articles"
     }
   ],
-  "confirmBeforeMove": false,
   "excludedFolders": [],
   "limitedFolders": [
     "/Inbox"
   ],
+  "confirmBeforeMove": false,
   "enableLogging": false
 }

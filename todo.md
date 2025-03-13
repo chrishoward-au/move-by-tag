@@ -1,3 +1,2 @@
 - Command to move files in current folder with option for child folders
-- fix add rule not working
 - add create rule option in move options dialog

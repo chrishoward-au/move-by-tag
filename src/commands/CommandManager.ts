@@ -6,6 +6,7 @@ import { FileUtils } from '../utils/FileUtils';
 import { FileMovementService } from '../services/FileMovementService';
 import { TagMappingService } from '../services/TagMappingService';
 import { MoveOptionsModal } from '../ui/MoveOptionsModal';
+import { TagMappingModal } from '../ui/TagMappingModal';
 
 export class CommandManager {
   private plugin: Plugin;
@@ -36,6 +37,7 @@ export class CommandManager {
     this.registerShowFileInfoCommand();
     this.registerMoveInCurrentFolderCommand();
     this.registerMoveOptionsCommand();
+    this.registerCreateRuleCommand();
   }
 
   /**
@@ -170,5 +172,47 @@ export class CommandManager {
         new MoveOptionsModal(this.app, this.settings, this.logger).open();
       }
     });
+  }
+
+  /**
+   * Register the Create Rule command
+   */
+  private registerCreateRuleCommand(): void {
+    this.plugin.addCommand({
+      id: 'create-tag-rule',
+      name: 'Create Tag Rule from Current File',
+      checkCallback: (checking: boolean) => {
+        // Check if there's an active file
+        const activeFile = this.app.workspace.getActiveFile();
+        if (activeFile) {
+          if (!checking) {
+            this.createRuleFromFile(activeFile);
+          }
+          return true;
+        }
+        return false;
+      }
+    });
+  }
+
+  /**
+   * Create a tag rule from the current file
+   */
+  private async createRuleFromFile(file: TFile): Promise<void> {
+    const saveSettings = async () => {
+      await this.plugin.saveData(this.settings);
+    };
+
+    const modal = new TagMappingModal(
+      this.app,
+      this.settings,
+      saveSettings,
+      () => {
+        this.logger(`Tag rule created for file: ${file.path}`);
+      },
+      file
+    );
+
+    modal.showAddMappingModal();
   }
 } 
